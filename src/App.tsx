@@ -9,13 +9,15 @@ import { InteractiveToolbar } from './components/InteractiveToolbar';
 import { soundManager } from './audio/soundManager';
 import confetti from 'canvas-confetti';
 
+type PageState = 'hero' | 'courtyard' | 'blessings';
+
 export function App() {
   const [isIntro, setIsIntro] = useState(true);
   const [diyasLitCount, setDiyasLitCount] = useState(1);
   const [cameraMode, setCameraMode] = useState<'courtyard' | 'sky' | 'cinematic'>('courtyard');
   const [fireworkType, setFireworkType] = useState<FireworkType>('chrysanthemum');
   const [recipientName, setRecipientName] = useState('');
-  const [activeTab, setActiveTab] = useState<'hero' | 'ending'>('hero');
+  const [activeTab, setActiveTab] = useState<PageState>('hero');
   const [isMuted, setIsMuted] = useState(false);
 
   const fireworksRef = useRef<FireworksHandle | null>(null);
@@ -86,24 +88,33 @@ export function App() {
     transitionLockRef.current = true;
 
     soundManager.playDiyaChime();
-    setActiveTab('ending');
+    if (activeTab === 'hero') {
+      setActiveTab('courtyard');
+    } else if (activeTab === 'courtyard') {
+      fireworksRef.current?.launchRocket(undefined, undefined, 'multi-layer');
+      setActiveTab('blessings');
+    }
 
     setTimeout(() => {
       transitionLockRef.current = false;
     }, 350);
-  }, []);
+  }, [activeTab]);
 
   const handlePrevTab = useCallback(() => {
     if (transitionLockRef.current) return;
     transitionLockRef.current = true;
 
     soundManager.playDiyaChime();
-    setActiveTab('hero');
+    if (activeTab === 'blessings') {
+      setActiveTab('courtyard');
+    } else if (activeTab === 'courtyard') {
+      setActiveTab('hero');
+    }
 
     setTimeout(() => {
       transitionLockRef.current = false;
     }, 350);
-  }, []);
+  }, [activeTab]);
 
   const handleToggleSound = useCallback(() => {
     setIsMuted((prev) => {
@@ -150,7 +161,7 @@ export function App() {
         touchAction: 'manipulation',
       }}
     >
-      {/* 1. Optimized 3D WebGL Palace Courtyard Scene */}
+      {/* 1. Optimized 3D WebGL Palace Courtyard Scene (Always full screen) */}
       <DiwaliCanvas3D
         isIntro={isIntro}
         diyasLitCount={diyasLitCount}
@@ -173,44 +184,74 @@ export function App() {
       {/* 4. Active Celebration Overlays & Controls */}
       {!isIntro && (
         <>
-          {/* Top Minimal Navigation Bar with Minimized Diya Counter & Sound */}
-          <AudioControls
-            diyasLitCount={diyasLitCount}
-            activeTab={activeTab}
-            onPrevTab={handlePrevTab}
-            onNextTab={handleNextTab}
-            isMuted={isMuted}
-            onToggleSound={handleToggleSound}
-          />
+          {/* Top Navigation Bar: rendered only on Page 1 (hero) and Page 3 (blessings), strictly REMOVED on Page 2 (courtyard) */}
+          {activeTab !== 'courtyard' && (
+            <AudioControls
+              diyasLitCount={diyasLitCount}
+              activeTab={activeTab === 'hero' ? 'hero' : 'ending'}
+              onPrevTab={handlePrevTab}
+              onNextTab={handleNextTab}
+              isMuted={isMuted}
+              onToggleSound={handleToggleSound}
+            />
+          )}
 
-          {/* Page 1: Main Diwali Wish Reveal */}
+          {/* PAGE 1: Main Diwali Wish Reveal */}
           <DiwaliWishHero
             visible={activeTab === 'hero'}
             recipientName={recipientName}
             onNext={handleNextTab}
           />
 
-          {/* Page 2: Special Ending Section with Share */}
+          {/* PAGE 2: Clean, Immersive 3D Courtyard with Single Prominent Action Button */}
+          {activeTab === 'courtyard' && (
+            <div
+              className="absolute bottom-6 sm:bottom-10 inset-x-0 z-30 flex flex-col items-center pointer-events-none select-none px-4 pb-[env(safe-area-inset-bottom,0px)] animate-fade-in-up"
+            >
+              <button
+                onClick={handleNextTab}
+                className="group relative pointer-events-auto inline-flex items-center justify-center gap-2.5 sm:gap-3 px-6 sm:px-10 py-3.5 sm:py-4 rounded-full font-serif font-bold text-sm sm:text-base md:text-lg text-amber-950 bg-linear-to-r from-[#FFF0A6] via-[#FFD700] to-[#D97706] shadow-[0_0_35px_rgba(251,191,36,0.65)] hover:shadow-[0_0_55px_rgba(251,191,36,0.95)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer border border-[#FFF9DB]/70 animate-pulse-glow max-w-[90vw]"
+                aria-label="View Family Blessings and Wishes"
+              >
+                {/* Diya Icon */}
+                <span className="text-xl sm:text-2xl drop-shadow-[0_0_10px_rgba(255,215,0,0.8)] group-hover:scale-110 transition-transform">
+                  🪔
+                </span>
+                
+                {/* Button Typography */}
+                <span className="tracking-wider">
+                  View Family Blessings & Wishes
+                </span>
+
+                {/* Subtle glassmorphism halo */}
+                <span className="absolute -inset-1 rounded-full bg-amber-400/35 blur-md group-hover:blur-lg transition-all -z-10" />
+              </button>
+            </div>
+          )}
+
+          {/* DESTINATION PAGE: Family Blessings & Wishes Section */}
           <EndingSection
-            visible={activeTab === 'ending'}
+            visible={activeTab === 'blessings'}
             recipientName={recipientName}
             onUpdateRecipient={setRecipientName}
             onTriggerFireworks={handleGrandFinale}
             onPrev={handlePrevTab}
           />
 
-          {/* Bottom Floating Interactive Toolbar */}
-          <InteractiveToolbar
-            onLightDiya={handleLightDiyaButton}
-            onLaunchFirework={handleLaunchFireworkButton}
-            onGrandFinale={handleGrandFinale}
-            isMuted={isMuted}
-            onToggleSound={handleToggleSound}
-            cameraMode={cameraMode}
-            onChangeCameraMode={setCameraMode}
-            currentFireworkType={fireworkType}
-            onChangeFireworkType={setFireworkType}
-          />
+          {/* Bottom Floating Interactive Toolbar: shown only on Page 1 (hero), strictly REMOVED on Page 2 (courtyard) and Blessings page */}
+          {activeTab === 'hero' && (
+            <InteractiveToolbar
+              onLightDiya={handleLightDiyaButton}
+              onLaunchFirework={handleLaunchFireworkButton}
+              onGrandFinale={handleGrandFinale}
+              isMuted={isMuted}
+              onToggleSound={handleToggleSound}
+              cameraMode={cameraMode}
+              onChangeCameraMode={setCameraMode}
+              currentFireworkType={fireworkType}
+              onChangeFireworkType={setFireworkType}
+            />
+          )}
         </>
       )}
     </main>
