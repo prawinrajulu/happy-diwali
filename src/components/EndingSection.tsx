@@ -115,7 +115,7 @@ export const EndingSection: React.FC<EndingSectionProps> = ({
               placeholder="Enter your or friend's name..."
               value={customNameInput}
               onChange={(e) => setCustomNameInput(e.target.value)}
-              className="flex-1 px-4 py-2 rounded-xl bg-black/70 border border-amber-500/50 text-amber-100 placeholder:text-amber-400/40 text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-amber-300"
+              className="custom-name-input"
               autoFocus
             />
             <button

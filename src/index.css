@@ -103,6 +103,31 @@ canvas {
    LUXURY FESTIVAL GRADIENTS & GLOWS
    ======================================================== */
 
+/* ========================================================
+   CUSTOM FORM INPUTS
+   ======================================================== */
+
+.custom-name-input {
+  flex: 1 1 0%;
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  background-color: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fef3c7;
+  font-size: 0.875rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.custom-name-input::placeholder {
+  color: rgba(251, 191, 36, 0.4);
+}
+
+.custom-name-input:focus {
+  border-color: #fcd34d;
+  box-shadow: 0 0 0 1px #fcd34d;
+}
+
 /* Luxury 3D Gold Shimmer Typography */
 .shimmer-gold {
   background: linear-gradient(
