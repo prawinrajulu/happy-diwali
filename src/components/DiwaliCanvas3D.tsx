@@ -603,7 +603,7 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
     <div
       ref={mountRef}
       className="absolute inset-0 w-full h-full pointer-events-auto"
-      style={{ touchAction: 'none' }}
+      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden', touchAction: 'none' }}
     />
   );
 };

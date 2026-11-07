@@ -78,7 +78,10 @@ export function App() {
   };
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-[#03040a]">
+    <div
+      className="relative w-full h-full overflow-hidden bg-[#03040a]"
+      style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: '#03040a' }}
+    >
       {/* 1. 3D WebGL Palace Courtyard & Diya Scene */}
       <DiwaliCanvas3D
         isIntro={isIntro}

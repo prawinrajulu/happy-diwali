@@ -412,6 +412,7 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
         ref={canvasRef}
         onPointerDown={handlePointerDown}
         className="absolute inset-0 z-10 w-full h-full pointer-events-auto cursor-crosshair"
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'auto' }}
         title="Click anywhere to launch fireworks!"
       />
     );
