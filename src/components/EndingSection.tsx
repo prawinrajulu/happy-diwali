@@ -104,7 +104,7 @@ export const EndingSection: React.FC<EndingSectionProps> = memo(({
         </div>
 
         {/* Heading */}
-        <h2 className="mt-1 text-2xl sm:text-4xl font-serif font-black tracking-wide text-transparent bg-clip-text bg-linear-to-r from-[#FFFBEB] via-[#FCD34D] via-[#F59E0B] to-[#D97706] drop-shadow-[0_2px_15px_rgba(255,215,0,0.5)]">
+        <h2 className="mt-1 text-2xl sm:text-4xl font-serif font-black tracking-wide text-transparent bg-clip-text bg-linear-to-r from-amber-100 via-amber-300 to-amber-500 drop-shadow-[0_2px_15px_rgba(255,215,0,0.5)]">
           A VERY HAPPY & PROSPEROUS DIWALI!
         </h2>
 

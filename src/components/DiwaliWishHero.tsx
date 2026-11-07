@@ -139,7 +139,7 @@ export const DiwaliWishHero: React.FC<DiwaliWishHeroProps> = memo(({
         </div>
 
         {/* Primary Visual Focus: Metallic Gold HAPPY DIWALI */}
-        <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-serif font-black tracking-wider text-transparent bg-clip-text bg-linear-to-r from-[#FFFBEB] via-[#FCD34D] via-[#F59E0B] to-[#D97706] drop-shadow-[0_4px_30px_rgba(251,191,36,0.5)] shimmer-gold">
+        <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-serif font-black tracking-wider text-transparent bg-clip-text bg-linear-to-r from-amber-100 via-amber-300 to-amber-500 drop-shadow-[0_4px_30px_rgba(251,191,36,0.5)] shimmer-gold">
           HAPPY DIWALI
         </h1>
 
