@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useEffect, useRef, useImperativeHandle, forwardRef, memo } from 'react';
 import { soundManager } from '../audio/soundManager';
+import { detectPerformanceProfile } from '../utils/performanceTier';
 
 export interface FireworksHandle {
   launchRocket: (targetX?: number, targetY?: number, type?: FireworkType) => void;
@@ -14,7 +15,8 @@ export type FireworkType =
   | 'willow-gold' 
   | 'ring';
 
-interface Particle {
+interface PooledParticle {
+  active: boolean;
   x: number;
   y: number;
   vx: number;
@@ -25,11 +27,13 @@ interface Particle {
   decay: number;
   gravity: number;
   friction: number;
-  flicker?: boolean;
-  trail: { x: number; y: number; alpha: number }[];
-  trailLength: number;
+  flicker: boolean;
+  trailX: Float32Array;
+  trailY: Float32Array;
+  trailCount: number;
+  maxTrail: number;
   type: FireworkType;
-  secondaryBurst?: boolean;
+  secondaryBurst: boolean;
 }
 
 interface Rocket {
@@ -43,33 +47,76 @@ interface Rocket {
   vy: number;
   color: string;
   type: FireworkType;
-  trail: { x: number; y: number }[];
-  progress: number;
+  trailX: number[];
+  trailY: number[];
 }
 
 const PALETTES = [
-  // Royal Golden & Amber
   ['#FFD700', '#FFA500', '#FF8C00', '#FFF8DC', '#FFE4B5'],
-  // Ruby Crimson & Rose Gold
   ['#FF1744', '#FF5252', '#FF4081', '#FF80AB', '#FFD700'],
-  // Emerald & Jade Royal
   ['#00E676', '#1DE9B6', '#69F0AE', '#00B0FF', '#FFEA00'],
-  // Royal Sapphire & Electric Violet
   ['#2979FF', '#7C4DFF', '#651FFF', '#00E5FF', '#E040FB'],
-  // Multiverse Festive Jewels
   ['#FF1744', '#FFD700', '#00E676', '#2979FF', '#FF4081', '#FF9100'],
-  // Pure Platinum & Gold Chrysanthemum
   ['#FFF2A3', '#FFD700', '#F59E0B', '#FDE68A', '#FFFFFF']
 ];
 
-export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>(
-  ({ active = true }, ref) => {
+export const FireworksCanvas = memo(
+  forwardRef<FireworksHandle, { active?: boolean }>(({ active = true }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const rocketsRef = useRef<Rocket[]>([]);
-    const particlesRef = useRef<Particle[]>([]);
     const animationFrameRef = useRef<number | null>(null);
     const lastAutoLaunchRef = useRef<number>(0);
     const finaleQueueRef = useRef<number>(0);
+    const isPausedRef = useRef<boolean>(false);
+
+    // Performance Profile cached per session
+    const perfRef = useRef(detectPerformanceProfile());
+
+    // --- OBJECT POOL FOR PARTICLES (Zero GC Allocation Loop) ---
+    const POOL_CAPACITY = perfRef.current.maxActiveParticles;
+    const poolRef = useRef<PooledParticle[]>([]);
+    const activeCountRef = useRef<number>(0);
+
+    // Initialize particle pool once
+    if (poolRef.current.length === 0) {
+      const TRAIL_BUFFER_SIZE = 8;
+      for (let i = 0; i < POOL_CAPACITY; i++) {
+        poolRef.current.push({
+          active: false,
+          x: 0,
+          y: 0,
+          vx: 0,
+          vy: 0,
+          alpha: 0,
+          color: '#FFD700',
+          size: 2,
+          decay: 0.015,
+          gravity: 0.045,
+          friction: 0.98,
+          flicker: false,
+          trailX: new Float32Array(TRAIL_BUFFER_SIZE),
+          trailY: new Float32Array(TRAIL_BUFFER_SIZE),
+          trailCount: 0,
+          maxTrail: TRAIL_BUFFER_SIZE,
+          type: 'chrysanthemum',
+          secondaryBurst: false,
+        });
+      }
+    }
+
+    const allocateParticle = (): PooledParticle | null => {
+      // Find inactive particle in pool
+      const pool = poolRef.current;
+      for (let i = 0; i < pool.length; i++) {
+        if (!pool[i].active) {
+          pool[i].active = true;
+          pool[i].trailCount = 0;
+          activeCountRef.current++;
+          return pool[i];
+        }
+      }
+      return null; // Pool capacity reached, drop gracefully to preserve 60fps
+    };
 
     const createExplosion = (
       x: number,
@@ -78,117 +125,124 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
       paletteChoice?: string[]
     ) => {
       const palette = paletteChoice || PALETTES[Math.floor(Math.random() * PALETTES.length)];
-      const baseColor = palette[0];
-      const count = type === 'chrysanthemum' ? 140 : type === 'multi-layer' ? 160 : 100;
+      const mult = perfRef.current.particleMultiplier;
+      const count = Math.floor(
+        (type === 'chrysanthemum' ? 120 : type === 'multi-layer' ? 140 : 85) * mult
+      );
 
-      // Play explosion sound effect with pitch variance
-      soundManager.playExplosionSound(0.85 + Math.random() * 0.4);
+      // Play audio effect
+      soundManager.playExplosionSound(0.85 + Math.random() * 0.35);
 
       if (type === 'ring') {
-        const ringCount = 70;
-        const speed = 4.2 + Math.random() * 1.5;
+        const ringCount = Math.floor(60 * mult);
+        const speed = 4.0 + Math.random() * 1.5;
         for (let i = 0; i < ringCount; i++) {
+          const p = allocateParticle();
+          if (!p) break;
           const angle = (i / ringCount) * Math.PI * 2;
-          const color = palette[i % palette.length];
-          particlesRef.current.push({
-            x,
-            y,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            alpha: 1,
-            color,
-            size: 2.4,
-            decay: 0.014 + Math.random() * 0.006,
-            gravity: 0.04,
-            friction: 0.98,
-            trail: [],
-            trailLength: 5,
-            type: 'ring'
-          });
+          p.x = x;
+          p.y = y;
+          p.vx = Math.cos(angle) * speed;
+          p.vy = Math.sin(angle) * speed;
+          p.alpha = 1.0;
+          p.color = palette[i % palette.length];
+          p.size = 2.4;
+          p.decay = 0.015 + Math.random() * 0.006;
+          p.gravity = 0.038;
+          p.friction = 0.98;
+          p.flicker = false;
+          p.maxTrail = 4;
+          p.type = 'ring';
+          p.secondaryBurst = false;
         }
         return;
       }
 
       if (type === 'multi-layer') {
-        // Outer layer
         const outerColor = palette[0];
         const innerColor = palette[2] || '#FFFFFF';
-        for (let i = 0; i < 90; i++) {
+        const outerCount = Math.floor(count * 0.6);
+        const innerCount = Math.floor(count * 0.4);
+
+        // Outer shell
+        for (let i = 0; i < outerCount; i++) {
+          const p = allocateParticle();
+          if (!p) break;
           const angle = Math.random() * Math.PI * 2;
-          const speed = Math.random() * 5.5 + 2.5;
-          particlesRef.current.push({
-            x,
-            y,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            alpha: 1,
-            color: outerColor,
-            size: 2.8,
-            decay: 0.012 + Math.random() * 0.005,
-            gravity: 0.05,
-            friction: 0.97,
-            trail: [],
-            trailLength: 6,
-            type: 'multi-layer'
-          });
+          const speed = Math.random() * 5.0 + 2.2;
+          p.x = x;
+          p.y = y;
+          p.vx = Math.cos(angle) * speed;
+          p.vy = Math.sin(angle) * speed;
+          p.alpha = 1.0;
+          p.color = outerColor;
+          p.size = 2.6;
+          p.decay = 0.013 + Math.random() * 0.005;
+          p.gravity = 0.048;
+          p.friction = 0.975;
+          p.flicker = false;
+          p.maxTrail = 5;
+          p.type = 'multi-layer';
+          p.secondaryBurst = false;
         }
+
         // Inner core
-        for (let i = 0; i < 60; i++) {
+        for (let i = 0; i < innerCount; i++) {
+          const p = allocateParticle();
+          if (!p) break;
           const angle = Math.random() * Math.PI * 2;
-          const speed = Math.random() * 2.5 + 0.8;
-          particlesRef.current.push({
-            x,
-            y,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            alpha: 1,
-            color: innerColor,
-            size: 3.2,
-            decay: 0.018 + Math.random() * 0.008,
-            gravity: 0.03,
-            friction: 0.96,
-            flicker: true,
-            trail: [],
-            trailLength: 4,
-            type: 'multi-layer'
-          });
+          const speed = Math.random() * 2.2 + 0.6;
+          p.x = x;
+          p.y = y;
+          p.vx = Math.cos(angle) * speed;
+          p.vy = Math.sin(angle) * speed;
+          p.alpha = 1.0;
+          p.color = innerColor;
+          p.size = 3.0;
+          p.decay = 0.018 + Math.random() * 0.008;
+          p.gravity = 0.03;
+          p.friction = 0.96;
+          p.flicker = true;
+          p.maxTrail = 3;
+          p.type = 'multi-layer';
+          p.secondaryBurst = false;
         }
         return;
       }
 
-      // Chrysanthemum, spherical, crackling, willow-gold
+      // Default spherical / chrysanthemum / willow-gold
       for (let i = 0; i < count; i++) {
+        const p = allocateParticle();
+        if (!p) break;
+
         const angle = Math.random() * Math.PI * 2;
         const speed =
           type === 'willow-gold'
-            ? Math.random() * 3.5 + 1.2
+            ? Math.random() * 3.2 + 1.0
             : type === 'chrysanthemum'
-            ? Math.random() * 5.8 + 1.5
-            : Math.random() * 4.8 + 1.0;
+            ? Math.random() * 5.4 + 1.4
+            : Math.random() * 4.4 + 1.0;
 
         const color = palette[Math.floor(Math.random() * palette.length)];
-        const isCrackling = type === 'crackling' || Math.random() < 0.25;
+        const isCrackling = type === 'crackling' || Math.random() < 0.2;
 
-        particlesRef.current.push({
-          x,
-          y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          alpha: 1,
-          color,
-          size: type === 'chrysanthemum' || type === 'willow-gold' ? 2.6 : 2.2,
-          decay:
-            type === 'willow-gold'
-              ? 0.008 + Math.random() * 0.004 // falls longer like weeping willow
-              : 0.014 + Math.random() * 0.008,
-          gravity: type === 'willow-gold' ? 0.065 : 0.045,
-          friction: type === 'chrysanthemum' ? 0.985 : 0.97,
-          flicker: isCrackling,
-          trail: [],
-          trailLength: type === 'chrysanthemum' || type === 'willow-gold' ? 9 : 5,
-          type,
-          secondaryBurst: isCrackling && Math.random() < 0.2
-        });
+        p.x = x;
+        p.y = y;
+        p.vx = Math.cos(angle) * speed;
+        p.vy = Math.sin(angle) * speed;
+        p.alpha = 1.0;
+        p.color = color;
+        p.size = type === 'chrysanthemum' || type === 'willow-gold' ? 2.5 : 2.1;
+        p.decay =
+          type === 'willow-gold'
+            ? 0.009 + Math.random() * 0.004
+            : 0.014 + Math.random() * 0.007;
+        p.gravity = type === 'willow-gold' ? 0.06 : 0.042;
+        p.friction = type === 'chrysanthemum' ? 0.982 : 0.97;
+        p.flicker = isCrackling;
+        p.maxTrail = type === 'chrysanthemum' || type === 'willow-gold' ? 6 : 4;
+        p.type = type;
+        p.secondaryBurst = isCrackling && Math.random() < 0.25;
       }
     };
 
@@ -200,6 +254,11 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
       const canvas = canvasRef.current;
       if (!canvas) return;
 
+      // Limit simultaneous rockets
+      if (rocketsRef.current.length >= perfRef.current.maxSimultaneousRockets) {
+        return;
+      }
+
       const types: FireworkType[] = [
         'chrysanthemum',
         'spherical',
@@ -209,11 +268,12 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
         'ring'
       ];
       const type = preferredType || types[Math.floor(Math.random() * types.length)];
+
       const startX =
         targetX !== undefined
-          ? targetX + (Math.random() * 100 - 50)
+          ? targetX + (Math.random() * 60 - 30)
           : canvas.width * 0.15 + Math.random() * canvas.width * 0.7;
-      const startY = canvas.height + 20;
+      const startY = canvas.height + 15;
 
       const destX =
         targetX !== undefined
@@ -221,13 +281,13 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
           : canvas.width * 0.15 + Math.random() * canvas.width * 0.7;
       const destY =
         targetY !== undefined
-          ? Math.max(80, Math.min(canvas.height * 0.65, targetY))
-          : canvas.height * 0.12 + Math.random() * canvas.height * 0.38;
+          ? Math.max(70, Math.min(canvas.height * 0.62, targetY))
+          : canvas.height * 0.12 + Math.random() * canvas.height * 0.36;
 
       const dx = destX - startX;
       const dy = destY - startY;
       const dist = Math.hypot(dx, dy);
-      const speed = 12 + Math.random() * 4;
+      const speed = 13 + Math.random() * 3.5;
 
       rocketsRef.current.push({
         x: startX,
@@ -240,15 +300,15 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
         vy: (dy / dist) * speed,
         color: '#FFD700',
         type,
-        trail: [],
-        progress: 0
+        trailX: [],
+        trailY: []
       });
 
       soundManager.playLaunchSound();
     };
 
     const triggerGrandFinale = () => {
-      finaleQueueRef.current = 18;
+      finaleQueueRef.current = perfRef.current.isMobile ? 10 : 16;
     };
 
     useImperativeHandle(ref, () => ({
@@ -256,16 +316,17 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
       triggerGrandFinale
     }));
 
-    // Handle user clicking anywhere on sky
-    const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const handlePointerLaunch = (clientX: number, clientY: number) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-
-      // Launch firework to clicked coordinates
+      const x = (clientX - rect.left) * (canvas.width / rect.width);
+      const y = (clientY - rect.top) * (canvas.height / rect.height);
       launchRocket(x, y);
+    };
+
+    const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+      handlePointerLaunch(e.clientX, e.clientY);
     };
 
     useEffect(() => {
@@ -276,82 +337,116 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
 
       const handleResize = () => {
         if (!canvas) return;
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        // Keep display smooth without overworking GPU
+        const dpr = perfRef.current.pixelRatio;
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+        ctx.scale(dpr, dpr);
       };
 
       handleResize();
       window.addEventListener('resize', handleResize);
 
+      // Handle Page Visibility: pause when inactive to save battery/CPU
+      const handleVisibilityChange = () => {
+        isPausedRef.current = document.hidden;
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
       const animate = (time: number) => {
         animationFrameRef.current = requestAnimationFrame(animate);
 
-        // Semi-transparent clear to create luxury motion blur/glowing light trails
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (isPausedRef.current) return;
 
-        // Switch to additive blending for luminous glowing fireworks
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        // Clear with motion blur
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
+        ctx.fillRect(0, 0, width, height);
+
+        // Additive blending for luminous glows
         ctx.globalCompositeOperation = 'lighter';
 
-        // Auto launch ambient fireworks when active
+        // Auto launch ambient fireworks
         if (active) {
-          if (time - lastAutoLaunchRef.current > 1800 + Math.random() * 1200) {
+          const launchInterval = perfRef.current.isMobile ? 3200 : 2100;
+          if (time - lastAutoLaunchRef.current > launchInterval + Math.random() * 1000) {
             launchRocket();
             lastAutoLaunchRef.current = time;
           }
 
-          // Handle grand finale queue
-          if (finaleQueueRef.current > 0 && Math.random() < 0.45) {
+          if (finaleQueueRef.current > 0 && Math.random() < 0.4) {
             finaleQueueRef.current--;
             launchRocket(
-              canvas.width * 0.1 + Math.random() * canvas.width * 0.8,
-              canvas.height * 0.1 + Math.random() * canvas.height * 0.4
+              width * 0.12 + Math.random() * width * 0.76,
+              height * 0.12 + Math.random() * height * 0.38
             );
           }
         }
 
-        // 1. Update & Render Rockets
+        // 1. Update Rockets
         for (let i = rocketsRef.current.length - 1; i >= 0; i--) {
           const r = rocketsRef.current[i];
           r.x += r.vx;
           r.y += r.vy;
 
-          // Record trail
-          r.trail.push({ x: r.x, y: r.y });
-          if (r.trail.length > 8) r.trail.shift();
-
-          // Render rocket trail
-          ctx.beginPath();
-          ctx.moveTo(r.trail[0].x, r.trail[0].y);
-          for (let t = 1; t < r.trail.length; t++) {
-            ctx.lineTo(r.trail[t].x, r.trail[t].y);
+          r.trailX.push(r.x);
+          r.trailY.push(r.y);
+          if (r.trailX.length > 7) {
+            r.trailX.shift();
+            r.trailY.shift();
           }
-          ctx.strokeStyle = '#FFA726';
-          ctx.lineWidth = 2.5;
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = '#FFB300';
-          ctx.stroke();
 
-          // Rocket head spark
+          // Rocket Trail
+          if (r.trailX.length > 1) {
+            ctx.beginPath();
+            ctx.moveTo(r.trailX[0], r.trailY[0]);
+            for (let t = 1; t < r.trailX.length; t++) {
+              ctx.lineTo(r.trailX[t], r.trailY[t]);
+            }
+            ctx.strokeStyle = '#FFA726';
+            ctx.lineWidth = 2.2;
+            ctx.stroke();
+          }
+
+          // Spark head
           ctx.beginPath();
-          ctx.arc(r.x, r.y, 3, 0, Math.PI * 2);
+          ctx.arc(r.x, r.y, 2.5, 0, Math.PI * 2);
           ctx.fillStyle = '#FFFFFF';
           ctx.fill();
 
-          // Check if reached destination or going past target
-          const distToTarget = Math.hypot(r.x - r.targetX, r.y - r.targetY);
-          if (distToTarget < 20 || r.y <= r.targetY) {
+          const dist = Math.hypot(r.x - r.targetX, r.y - r.targetY);
+          if (dist < 18 || r.y <= r.targetY) {
             createExplosion(r.x, r.y, r.type);
             rocketsRef.current.splice(i, 1);
           }
         }
 
-        // 2. Update & Render Particles
-        for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-          const p = particlesRef.current[i];
-          p.trail.push({ x: p.x, y: p.y, alpha: p.alpha });
-          if (p.trail.length > p.trailLength) p.trail.shift();
+        // 2. Update Pooled Particles (Fast batch render without allocations)
+        const pool = poolRef.current;
+        for (let i = 0; i < pool.length; i++) {
+          const p = pool[i];
+          if (!p.active) continue;
+
+          // Record trail into pre-allocated typed arrays
+          const tCount = p.trailCount;
+          if (tCount < p.maxTrail) {
+            p.trailX[tCount] = p.x;
+            p.trailY[tCount] = p.y;
+            p.trailCount++;
+          } else {
+            // Shift trail elements left by 1
+            for (let s = 0; s < p.maxTrail - 1; s++) {
+              p.trailX[s] = p.trailX[s + 1];
+              p.trailY[s] = p.trailY[s + 1];
+            }
+            p.trailX[p.maxTrail - 1] = p.x;
+            p.trailY[p.maxTrail - 1] = p.y;
+          }
 
           p.vx *= p.friction;
           p.vy *= p.friction;
@@ -361,42 +456,48 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
           p.alpha -= p.decay;
 
           if (p.alpha <= 0) {
-            // Secondary sparkle crackle
-            if (p.secondaryBurst && Math.random() < 0.3) {
+            if (p.secondaryBurst && Math.random() < 0.25) {
               soundManager.playCrackleSound();
             }
-            particlesRef.current.splice(i, 1);
+            p.active = false;
+            activeCountRef.current = Math.max(0, activeCountRef.current - 1);
             continue;
           }
 
-          // Draw trail
-          if (p.trail.length > 1) {
+          // Draw trail path
+          if (p.trailCount > 1) {
             ctx.beginPath();
-            ctx.moveTo(p.trail[0].x, p.trail[0].y);
-            for (let t = 1; t < p.trail.length; t++) {
-              ctx.lineTo(p.trail[t].x, p.trail[t].y);
+            ctx.moveTo(p.trailX[0], p.trailY[0]);
+            for (let t = 1; t < p.trailCount; t++) {
+              ctx.lineTo(p.trailX[t], p.trailY[t]);
             }
             ctx.strokeStyle = p.color;
-            ctx.globalAlpha = p.alpha * 0.7;
-            ctx.lineWidth = p.size * 0.8;
+            ctx.globalAlpha = p.alpha * 0.65;
+            ctx.lineWidth = p.size * 0.75;
             ctx.stroke();
           }
 
-          // Draw particle head
-          const flickerOpacity = p.flicker
-            ? p.alpha * (0.4 + Math.random() * 0.6)
+          // Draw luminous particle head
+          const flickerAlpha = p.flicker
+            ? p.alpha * (0.35 + Math.random() * 0.65)
             : p.alpha;
-          ctx.globalAlpha = Math.max(0, flickerOpacity);
+
+          // Outer soft glow (efficient bloom without shadowBlur)
+          ctx.globalAlpha = flickerAlpha * 0.35;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * 2.2, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.fill();
+
+          // Core bright spark
+          ctx.globalAlpha = flickerAlpha;
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fillStyle = p.color;
-          ctx.shadowBlur = 12;
-          ctx.shadowColor = p.color;
+          ctx.fillStyle = '#FFFFFF';
           ctx.fill();
         }
 
         ctx.globalAlpha = 1.0;
-        ctx.shadowBlur = 0;
       };
 
       animationFrameRef.current = requestAnimationFrame(animate);
@@ -404,6 +505,7 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
       return () => {
         if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
         window.removeEventListener('resize', handleResize);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }, [active]);
 
@@ -411,11 +513,21 @@ export const FireworksCanvas = forwardRef<FireworksHandle, { active?: boolean }>
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}
-        className="absolute inset-0 z-10 w-full h-full pointer-events-auto cursor-crosshair"
-        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'auto' }}
-        title="Click anywhere to launch fireworks!"
+        className="absolute inset-0 z-10 w-full h-full pointer-events-auto cursor-crosshair select-none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'auto',
+          touchAction: 'none'
+        }}
+        title="Click or tap anywhere in the sky to launch fireworks!"
+        aria-label="Interactive Diwali Fireworks Canvas"
       />
     );
-  }
+  })
 );
 
+FireworksCanvas.displayName = 'FireworksCanvas';

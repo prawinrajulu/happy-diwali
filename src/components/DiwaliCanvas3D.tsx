@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
 import * as THREE from 'three';
 import { soundManager } from '../audio/soundManager';
+import { detectPerformanceProfile, isWebGLAvailable } from '../utils/performanceTier';
 
 interface DiwaliCanvas3DProps {
   isIntro: boolean;
@@ -9,124 +10,144 @@ interface DiwaliCanvas3DProps {
   cameraMode: 'courtyard' | 'sky' | 'cinematic';
 }
 
-export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
+export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
   isIntro,
   diyasLitCount,
   onDiyaClick,
   cameraMode,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const [webGlSupported, setWebGlSupported] = useState<boolean>(true);
 
-  // References to keep animation objects accessible in render loop
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const diyasGroupRef = useRef<THREE.Group | null>(null);
-  const lanternsGroupRef = useRef<THREE.Group | null>(null);
+  // Mutable refs to prevent re-instantiating WebGL scene when state changes
+  const isIntroRef = useRef(isIntro);
+  isIntroRef.current = isIntro;
+
+  const cameraModeRef = useRef(cameraMode);
+  cameraModeRef.current = cameraMode;
+
+  const onDiyaClickRef = useRef(onDiyaClick);
+  onDiyaClickRef.current = onDiyaClick;
+
+  const isPausedRef = useRef(false);
   const flamesRef = useRef<{ mesh: THREE.Mesh; light: THREE.PointLight; baseScale: number }[]>([]);
-  const sparkParticlesRef = useRef<THREE.Points | null>(null);
-  const rangoliMeshRef = useRef<THREE.Mesh | null>(null);
   const mousePos = useRef({ x: 0, y: 0, targetX: 0, targetY: 0 });
 
   useEffect(() => {
+    // 1. Verify WebGL availability
+    if (!isWebGLAvailable()) {
+      setWebGlSupported(false);
+      return;
+    }
+
     const container = mountRef.current;
     if (!container) return;
 
-    // --- 1. SCENE SETUP ---
+    const perf = detectPerformanceProfile();
+
+    // 2. SCENE SETUP
     const scene = new THREE.Scene();
-    sceneRef.current = scene;
     scene.fog = new THREE.FogExp2(0x05060f, 0.015);
 
     const camera = new THREE.PerspectiveCamera(
       50,
       window.innerWidth / window.innerHeight,
       0.1,
-      1000
+      600
     );
-    cameraRef.current = camera;
-
-    // Initial camera position for Intro (close-up on single Diya)
     camera.position.set(0, 1.2, 3.2);
     camera.lookAt(0, 0.4, 0);
 
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: 'high-performance',
-      alpha: false
-    });
-    rendererRef.current = renderer;
+    let renderer: THREE.WebGLRenderer | null = null;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: !perf.isMobile,
+        powerPreference: 'high-performance',
+        alpha: false,
+        stencil: false,
+        depth: true,
+      });
+    } catch (e) {
+      setWebGlSupported(false);
+      return;
+    }
+
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(perf.pixelRatio);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    if (perf.shadowsEnabled) {
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    } else {
+      renderer.shadowMap.enabled = false;
+    }
+
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
-    // --- 2. AMBIENT & MOONLIGHT ---
-    const ambientLight = new THREE.AmbientLight(0x080c1e, 0.8);
+    // 3. LIGHTING
+    const ambientLight = new THREE.AmbientLight(0x080c1e, 0.85);
     scene.add(ambientLight);
 
-    const moonLight = new THREE.DirectionalLight(0x385285, 0.6);
+    const moonLight = new THREE.DirectionalLight(0x385285, 0.65);
     moonLight.position.set(-15, 30, -10);
-    moonLight.castShadow = true;
-    moonLight.shadow.mapSize.width = 1024;
-    moonLight.shadow.mapSize.height = 1024;
+    if (perf.shadowsEnabled) {
+      moonLight.castShadow = true;
+      moonLight.shadow.mapSize.width = perf.shadowMapSize;
+      moonLight.shadow.mapSize.height = perf.shadowMapSize;
+    }
     scene.add(moonLight);
 
-    // --- 3. PROCEDURAL TEXTURES ---
-    // A. Sacred Mandala / Rangoli Canvas Texture
+    // 4. PROCEDURAL RANGOLI TEXTURE
     const createRangoliTexture = () => {
       const c = document.createElement('canvas');
-      c.width = 1024;
-      c.height = 1024;
+      const size = perf.isMobile ? 512 : 1024;
+      c.width = size;
+      c.height = size;
       const ctx = c.getContext('2d')!;
-      const cx = 512;
-      const cy = 512;
+      const cx = size / 2;
+      const cy = size / 2;
 
-      // Dark background with subtle gold rim
-      ctx.clearRect(0, 0, 1024, 1024);
+      ctx.clearRect(0, 0, size, size);
 
-      // Concentric circles with ornamental patterns
-      const rings = [480, 420, 360, 300, 240, 180, 120, 60];
+      const scaleFactor = size / 1024;
+      const rings = [480, 420, 360, 300, 240, 180, 120, 60].map(r => r * scaleFactor);
       const colors = ['#FF9900', '#FFD700', '#FF1744', '#FF5722', '#F59E0B', '#E040FB', '#FFEB3B'];
 
       rings.forEach((r, idx) => {
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.strokeStyle = colors[idx % colors.length];
-        ctx.lineWidth = 6;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = colors[idx % colors.length];
+        ctx.lineWidth = Math.max(3, 6 * scaleFactor);
         ctx.stroke();
 
-        // Petals / Lotus rays
         const petalCount = 8 * (idx + 1);
         for (let p = 0; p < petalCount; p++) {
           const angle = (p / petalCount) * Math.PI * 2;
           const px = cx + Math.cos(angle) * r;
           const py = cy + Math.sin(angle) * r;
           ctx.beginPath();
-          ctx.arc(px, py, 4 + (idx % 3), 0, Math.PI * 2);
+          ctx.arc(px, py, (4 + (idx % 3)) * scaleFactor, 0, Math.PI * 2);
           ctx.fillStyle = colors[(idx + 1) % colors.length];
           ctx.fill();
         }
       });
 
-      // Central Om / Auspicious sun flower
       ctx.beginPath();
-      ctx.arc(cx, cy, 35, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 35 * scaleFactor, 0, Math.PI * 2);
       ctx.fillStyle = '#FFE082';
-      ctx.shadowBlur = 25;
-      ctx.shadowColor = '#FFB300';
       ctx.fill();
 
       const tex = new THREE.CanvasTexture(c);
+      tex.generateMipmaps = !perf.isMobile;
       return tex;
     };
 
-    // B. Marble Courtyard Floor
+    const rangoliTex = createRangoliTexture();
+
+    // Floor
     const floorGeo = new THREE.PlaneGeometry(80, 80);
     const floorMat = new THREE.MeshStandardMaterial({
       color: 0x070912,
@@ -136,69 +157,69 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.01;
-    floor.receiveShadow = true;
+    floor.receiveShadow = perf.shadowsEnabled;
     scene.add(floor);
 
-    // Decorative Raised Marble Dais for Rangoli
-    const daisGeo = new THREE.CylinderGeometry(4.2, 4.4, 0.12, 48);
+    // Dais
+    const daisGeo = new THREE.CylinderGeometry(4.2, 4.4, 0.12, perf.isMobile ? 24 : 48);
     const daisMat = new THREE.MeshStandardMaterial({
       color: 0x111322,
       roughness: 0.25,
-      metalness: 0.4
+      metalness: 0.4,
     });
     const dais = new THREE.Mesh(daisGeo, daisMat);
     dais.position.set(0, 0.05, 0);
-    dais.receiveShadow = true;
+    dais.receiveShadow = perf.shadowsEnabled;
     scene.add(dais);
 
-    // Rangoli Mesh on Dais
+    // Rangoli Mesh
     const rangoliGeo = new THREE.PlaneGeometry(7.8, 7.8);
     const rangoliMat = new THREE.MeshBasicMaterial({
-      map: createRangoliTexture(),
+      map: rangoliTex,
       transparent: true,
       opacity: 0.95,
       blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
     });
     const rangoli = new THREE.Mesh(rangoliGeo, rangoliMat);
     rangoli.rotation.x = -Math.PI / 2;
     rangoli.position.set(0, 0.12, 0);
     scene.add(rangoli);
-    rangoliMeshRef.current = rangoli;
 
-    // --- 4. TRADITIONAL 3D DIYA BUILDER ---
+    // 5. TRADITIONAL 3D DIYAS
     const diyasGroup = new THREE.Group();
-    diyasGroupRef.current = diyasGroup;
     scene.add(diyasGroup);
 
-    // Diya Clay/Brass lathe profile
-    const diyaPoints = [];
-    diyaPoints.push(new THREE.Vector2(0, 0));
-    diyaPoints.push(new THREE.Vector2(0.4, 0.02));
-    diyaPoints.push(new THREE.Vector2(0.65, 0.12));
-    diyaPoints.push(new THREE.Vector2(0.72, 0.25));
-    diyaPoints.push(new THREE.Vector2(0.68, 0.35));
-    diyaPoints.push(new THREE.Vector2(0.6, 0.38));
-    diyaPoints.push(new THREE.Vector2(0.48, 0.26));
-    diyaPoints.push(new THREE.Vector2(0.1, 0.12));
-    diyaPoints.push(new THREE.Vector2(0, 0.1));
+    const diyaPoints = [
+      new THREE.Vector2(0, 0),
+      new THREE.Vector2(0.4, 0.02),
+      new THREE.Vector2(0.65, 0.12),
+      new THREE.Vector2(0.72, 0.25),
+      new THREE.Vector2(0.68, 0.35),
+      new THREE.Vector2(0.6, 0.38),
+      new THREE.Vector2(0.48, 0.26),
+      new THREE.Vector2(0.1, 0.12),
+      new THREE.Vector2(0, 0.1),
+    ];
 
-    const diyaGeo = new THREE.LatheGeometry(diyaPoints, 32);
+    const diyaGeo = new THREE.LatheGeometry(diyaPoints, perf.isMobile ? 18 : 32);
     const brassMat = new THREE.MeshStandardMaterial({
-      color: 0xc8963e, // Antique Indian Brass
+      color: 0xc8963e,
       roughness: 0.32,
       metalness: 0.78,
     });
 
-    // Flame Geometry: teardrop flame
-    const flameGeo = new THREE.ConeGeometry(0.09, 0.32, 16);
+    const flameGeo = new THREE.ConeGeometry(0.09, 0.32, perf.isMobile ? 10 : 16);
     flameGeo.translate(0, 0.16, 0);
     const flameMat = new THREE.MeshBasicMaterial({
       color: 0xffe277,
       transparent: true,
       opacity: 0.92,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
     });
+
+    const wickGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.1, 6);
+    const wickMat = new THREE.MeshStandardMaterial({ color: 0x221105 });
 
     const createDiya = (x: number, y: number, z: number, scale = 1.0, isMain = false) => {
       const diyaHolder = new THREE.Group();
@@ -206,28 +227,25 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
       diyaHolder.scale.set(scale, scale, scale);
 
       const bowl = new THREE.Mesh(diyaGeo, brassMat);
-      bowl.castShadow = true;
-      bowl.receiveShadow = true;
+      bowl.castShadow = perf.shadowsEnabled && isMain;
+      bowl.receiveShadow = perf.shadowsEnabled;
       diyaHolder.add(bowl);
 
-      // Wick
-      const wickGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.1, 8);
-      const wickMat = new THREE.MeshStandardMaterial({ color: 0x221105 });
       const wick = new THREE.Mesh(wickGeo, wickMat);
       wick.position.set(0.18, 0.22, 0);
       wick.rotation.z = -0.3;
       diyaHolder.add(wick);
 
-      // Flame
       const flame = new THREE.Mesh(flameGeo, flameMat.clone());
       flame.position.set(0.2, 0.28, 0);
       diyaHolder.add(flame);
 
-      // Point Light from Flame
-      const flameLight = new THREE.PointLight(0xff9922, isMain ? 2.5 : 1.4, 6.5);
+      const flameLight = new THREE.PointLight(
+        0xff9922,
+        isMain ? 2.5 : 1.3,
+        isMain ? 7.0 : 5.0
+      );
       flameLight.position.set(0.2, 0.35, 0);
-      flameLight.castShadow = isMain;
-      flameLight.shadow.bias = -0.002;
       diyaHolder.add(flameLight);
 
       diyasGroup.add(diyaHolder);
@@ -235,19 +253,18 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
       flamesRef.current.push({
         mesh: flame,
         light: flameLight,
-        baseScale: scale
+        baseScale: scale,
       });
 
-      // Attach data for raycasting
       bowl.userData = { isDiya: true, parentHolder: diyaHolder };
       return diyaHolder;
     };
 
-    // Central Hero Diya (used in Intro and courtyard center)
+    // Hero center diya
     createDiya(0, 0.12, 0, 1.4, true);
 
-    // Circle of Diyas around the Rangoli border
-    const rangoliDiyCount = 10;
+    // Rangoli perimeter diyas (reduced count on mobile)
+    const rangoliDiyCount = perf.isMobile ? 6 : 10;
     for (let i = 0; i < rangoliDiyCount; i++) {
       const angle = (i / rangoliDiyCount) * Math.PI * 2;
       const rx = Math.cos(angle) * 3.8;
@@ -255,84 +272,73 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
       createDiya(rx, 0.08, rz, 0.85);
     }
 
-    // Additional Courtyard Diyas on pedestals / perimeter
-    const perimeterPositions = [
-      [-6, 0.08, -3],
-      [6, 0.08, -3],
-      [-6, 0.08, 4],
-      [6, 0.08, 4],
-      [-9, 0.08, 0],
-      [9, 0.08, 0],
-      [-3, 0.08, 8],
-      [3, 0.08, 8],
-      [-8, 0.08, 8],
-      [8, 0.08, 8]
-    ];
-    perimeterPositions.forEach(([px, py, pz]) => {
-      createDiya(px, py, pz, 0.9);
-    });
+    if (!perf.isMobile) {
+      const perimeterPositions = [
+        [-6, 0.08, -3],
+        [6, 0.08, -3],
+        [-6, 0.08, 4],
+        [6, 0.08, 4],
+        [-9, 0.08, 0],
+        [9, 0.08, 0],
+      ];
+      perimeterPositions.forEach(([px, py, pz]) => {
+        createDiya(px, py, pz, 0.85);
+      });
+    }
 
-    // --- 5. INDIAN ARCHITECTURE (Pillars, Jali Lattice Arches, Palace Domes) ---
-    const archGroup = new THREE.Group();
-    scene.add(archGroup);
-
-    // Carved Pillars
+    // 6. INDIAN ARCHITECTURE (Pillars & Palace Backdrop)
     const pillarMat = new THREE.MeshStandardMaterial({
       color: 0x1c1e30,
       roughness: 0.35,
-      metalness: 0.3
+      metalness: 0.3,
     });
+    const pillarGeo = new THREE.CylinderGeometry(0.35, 0.45, 9, perf.isMobile ? 8 : 16);
+    const baseGeo = new THREE.BoxGeometry(1.2, 0.6, 1.2);
+    const capGeo = new THREE.CylinderGeometry(0.7, 0.4, 0.8, perf.isMobile ? 8 : 12);
 
     const createPillar = (px: number, pz: number) => {
       const pillar = new THREE.Group();
       pillar.position.set(px, 0, pz);
 
-      // Base
-      const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.6, 1.2), pillarMat);
+      const baseMesh = new THREE.Mesh(baseGeo, pillarMat);
       baseMesh.position.y = 0.3;
       pillar.add(baseMesh);
 
-      // Shaft
-      const shaftMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 9, 16), pillarMat);
+      const shaftMesh = new THREE.Mesh(pillarGeo, pillarMat);
       shaftMesh.position.y = 5;
-      shaftMesh.castShadow = true;
       pillar.add(shaftMesh);
 
-      // Capital
-      const capMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.4, 0.8, 12), pillarMat);
+      const capMesh = new THREE.Mesh(capGeo, pillarMat);
       capMesh.position.y = 9.8;
       pillar.add(capMesh);
 
-      archGroup.add(pillar);
+      scene.add(pillar);
     };
 
     [-12, -7, 7, 12].forEach(px => {
       createPillar(px, -6);
-      createPillar(px, 10);
+      if (!perf.isMobile) createPillar(px, 10);
     });
 
-    // Background Palace Wall with Glowing Rajput/Mughal Arches
+    // Palace Backdrop
     const palaceBackdropGeo = new THREE.PlaneGeometry(60, 24);
     const palaceMat = new THREE.MeshStandardMaterial({
       color: 0x090c18,
       roughness: 0.7,
-      metalness: 0.2
+      metalness: 0.2,
     });
     const palaceWall = new THREE.Mesh(palaceBackdropGeo, palaceMat);
     palaceWall.position.set(0, 10, -18);
     scene.add(palaceWall);
 
-    // Glowing Palace Domes (Silhouette in deep background)
-    const domeMat = new THREE.MeshBasicMaterial({
-      color: 0x161b36,
-    });
+    // Glowing Palace Domes
+    const domeMat = new THREE.MeshBasicMaterial({ color: 0x161b36 });
     const createDome = (dx: number, dy: number, dz: number, r: number) => {
-      const domeGeo = new THREE.SphereGeometry(r, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+      const domeGeo = new THREE.SphereGeometry(r, perf.isMobile ? 12 : 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
       const dome = new THREE.Mesh(domeGeo, domeMat);
       dome.position.set(dx, dy, dz);
 
-      // Spire / Kalash atop dome
-      const spireGeo = new THREE.ConeGeometry(0.2, 1.8, 12);
+      const spireGeo = new THREE.ConeGeometry(0.2, 1.8, 8);
       const spireMat = new THREE.MeshBasicMaterial({ color: 0xcca040 });
       const spire = new THREE.Mesh(spireGeo, spireMat);
       spire.position.set(dx, dy + r + 0.9, dz);
@@ -342,109 +348,107 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
     };
 
     createDome(0, 14, -20, 4.5);
-    createDome(-14, 12, -22, 3.2);
-    createDome(14, 12, -22, 3.2);
+    if (!perf.isMobile) {
+      createDome(-14, 12, -22, 3.2);
+      createDome(14, 12, -22, 3.2);
+    }
 
-    // Decorative Jali Arch Silhouettes with Warm Golden Rim Backlight
-    const jaliLight = new THREE.PointLight(0xff8811, 2.5, 30);
-    jaliLight.position.set(0, 8, -12);
-    scene.add(jaliLight);
-
-    // --- 6. 3D HANGING LANTERNS (AKASH KANDILS) ---
-    const lanternsGroup = new THREE.Group();
-    lanternsGroupRef.current = lanternsGroup;
-    scene.add(lanternsGroup);
+    // 7. HANGING LANTERNS (AKASH KANDILS)
+    const kandilObjects: THREE.Group[] = [];
+    const kandilMat = new THREE.MeshStandardMaterial({
+      color: 0xd9381e,
+      emissive: 0xaa2200,
+      emissiveIntensity: 0.6,
+      roughness: 0.25,
+      metalness: 0.3,
+    });
+    const stringMat = new THREE.MeshBasicMaterial({ color: 0xcca040 });
+    const tasselMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    const bodyGeo = new THREE.OctahedronGeometry(0.85, 0);
+    const tasselGeo = new THREE.ConeGeometry(0.25, 1.2, 6);
+    const stringGeo = new THREE.CylinderGeometry(0.01, 0.01, 4, 4);
 
     const createKandil = (kx: number, ky: number, kz: number) => {
       const kandil = new THREE.Group();
       kandil.position.set(kx, ky, kz);
 
-      // Hanging string
-      const stringGeo = new THREE.CylinderGeometry(0.01, 0.01, 4, 6);
-      const stringMat = new THREE.MeshBasicMaterial({ color: 0xcca040 });
       const stringMesh = new THREE.Mesh(stringGeo, stringMat);
       stringMesh.position.y = 2;
       kandil.add(stringMesh);
 
-      // Diamond body (octahedron)
-      const bodyGeo = new THREE.OctahedronGeometry(0.85, 0);
-      const bodyMat = new THREE.MeshStandardMaterial({
-        color: 0xd9381e, // Festive vermilion silk
-        emissive: 0xaa2200,
-        emissiveIntensity: 0.6,
-        roughness: 0.2,
-        metalness: 0.3
-      });
-      const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+      const bodyMesh = new THREE.Mesh(bodyGeo, kandilMat);
       kandil.add(bodyMesh);
 
-      // Golden tassels hanging from base
-      const tasselGeo = new THREE.ConeGeometry(0.25, 1.2, 8);
-      const tasselMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
       const tasselMesh = new THREE.Mesh(tasselGeo, tasselMat);
       tasselMesh.position.y = -1.1;
       tasselMesh.rotation.x = Math.PI;
       kandil.add(tasselMesh);
 
-      // Internal Warm Lantern Glow
-      const kLight = new THREE.PointLight(0xffaa33, 1.2, 7);
-      kandil.add(kLight);
+      if (!perf.isMobile) {
+        const kLight = new THREE.PointLight(0xffaa33, 1.0, 6);
+        kandil.add(kLight);
+      }
 
-      lanternsGroup.add(kandil);
+      scene.add(kandil);
+      kandilObjects.push(kandil);
       return kandil;
     };
 
-    const kandilPositions = [
-      [-7, 8.5, -4],
-      [7, 8.5, -4],
-      [-11, 7.8, 2],
-      [11, 7.8, 2],
-      [-3.5, 9.2, 4],
-      [3.5, 9.2, 4]
-    ];
-    const kandilObjects = kandilPositions.map(([x, y, z]) => createKandil(x, y, z));
+    const kandilPositions = perf.isMobile
+      ? [
+          [-5, 8.5, -4],
+          [5, 8.5, -4],
+        ]
+      : [
+          [-7, 8.5, -4],
+          [7, 8.5, -4],
+          [-11, 7.8, 2],
+          [11, 7.8, 2],
+        ];
 
-    // --- 7. FLOATING GOLDEN EMBERS / FIREFLIES PARTICLES ---
-    const emberCount = 350;
+    kandilPositions.forEach(([x, y, z]) => createKandil(x, y, z));
+
+    // 8. FLOATING GOLDEN EMBERS (Adaptive count)
+    const emberCount = perf.embersCount;
     const emberGeo = new THREE.BufferGeometry();
     const emberPositions = new Float32Array(emberCount * 3);
     const emberSpeeds = new Float32Array(emberCount);
 
     for (let i = 0; i < emberCount; i++) {
-      emberPositions[i * 3] = (Math.random() - 0.5) * 35;
-      emberPositions[i * 3 + 1] = Math.random() * 16;
-      emberPositions[i * 3 + 2] = (Math.random() - 0.5) * 30;
+      emberPositions[i * 3] = (Math.random() - 0.5) * 32;
+      emberPositions[i * 3 + 1] = Math.random() * 15;
+      emberPositions[i * 3 + 2] = (Math.random() - 0.5) * 28;
       emberSpeeds[i] = 0.015 + Math.random() * 0.035;
     }
     emberGeo.setAttribute('position', new THREE.BufferAttribute(emberPositions, 3));
 
-    // Emissive Gold Sparkle Particle Material
     const emberMat = new THREE.PointsMaterial({
       color: 0xffd24d,
-      size: 0.14,
+      size: perf.isMobile ? 0.18 : 0.14,
       transparent: true,
       opacity: 0.85,
       blending: THREE.AdditiveBlending,
     });
     const embers = new THREE.Points(emberGeo, emberMat);
     scene.add(embers);
-    sparkParticlesRef.current = embers;
 
-    // --- 8. MOUSE PARALLAX & RAYCASTING ---
-    const raycaster = new THREE.Raycaster();
-    const mouseVector = new THREE.Vector2();
-
+    // 9. EVENT LISTENERS
     const handlePointerMove = (e: MouseEvent) => {
+      if (!perf.enableMotionParallax) return;
       mousePos.current.targetX = (e.clientX / window.innerWidth) * 2 - 1;
       mousePos.current.targetY = -(e.clientY / window.innerHeight) * 2 + 1;
     };
     window.addEventListener('mousemove', handlePointerMove);
 
-    const handleCanvasClick = (e: MouseEvent) => {
-      mouseVector.x = (e.clientX / window.innerWidth) * 2 - 1;
-      mouseVector.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    // Raycasting for clicking diyas (works for mouse and touch)
+    const raycaster = new THREE.Raycaster();
+    const touchVector = new THREE.Vector2();
 
-      raycaster.setFromCamera(mouseVector, camera);
+    const checkDiyaIntersection = (clientX: number, clientY: number) => {
+      touchVector.x = (clientX / window.innerWidth) * 2 - 1;
+      touchVector.y = -(clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(touchVector, camera);
       const intersects = raycaster.intersectObjects(diyasGroup.children, true);
 
       if (intersects.length > 0) {
@@ -456,11 +460,10 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
         });
 
         if (hitDiya) {
-          // Play auspicious bell chime
           soundManager.playDiyaChime();
-          onDiyaClick();
+          onDiyaClickRef.current();
 
-          // Flash all flames temporarily
+          // Flare all flames briefly
           flamesRef.current.forEach(f => {
             f.light.intensity *= 1.8;
             setTimeout(() => {
@@ -470,9 +473,20 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
         }
       }
     };
-    renderer.domElement.addEventListener('click', handleCanvasClick);
 
-    // --- 9. RESIZE HANDLER ---
+    const handleCanvasClick = (e: MouseEvent) => {
+      checkDiyaIntersection(e.clientX, e.clientY);
+    };
+
+    const handleCanvasTouch = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        checkDiyaIntersection(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+
+    renderer.domElement.addEventListener('click', handleCanvasClick);
+    renderer.domElement.addEventListener('touchstart', handleCanvasTouch, { passive: true });
+
     const handleResize = () => {
       if (!renderer || !camera) return;
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -481,49 +495,53 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
     };
     window.addEventListener('resize', handleResize);
 
-    // --- 10. MAIN ANIMATION LOOP ---
+    const handleVisibilityChange = () => {
+      isPausedRef.current = document.hidden;
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 10. ANIMATION LOOP (Smooth, zero re-renders)
     let clock = new THREE.Clock();
+    let animId: number;
 
     const animate = () => {
-      requestAnimationFrame(animate);
-      const delta = clock.getDelta();
+      animId = requestAnimationFrame(animate);
+
+      if (isPausedRef.current) return;
+
       const time = clock.getElapsedTime();
 
-      // Mouse Parallax Smooth Lerp
+      // Smooth mouse parallax
       mousePos.current.x += (mousePos.current.targetX - mousePos.current.x) * 0.05;
       mousePos.current.y += (mousePos.current.targetY - mousePos.current.y) * 0.05;
 
-      // 1. Camera Transitions based on state & cameraMode
-      if (isIntro) {
-        // Close-up intro view focused on center diya with gentle breathing orbit
-        const introDist = 2.8;
+      // 1. Camera positioning according to active mode
+      if (isIntroRef.current) {
         const targetCamX = Math.sin(time * 0.3) * 0.4 + mousePos.current.x * 0.3;
         const targetCamY = 0.8 + Math.cos(time * 0.4) * 0.1 + mousePos.current.y * 0.2;
-        const targetCamZ = introDist + Math.sin(time * 0.2) * 0.2;
+        const targetCamZ = 2.8 + Math.sin(time * 0.2) * 0.2;
 
         camera.position.x += (targetCamX - camera.position.x) * 0.04;
         camera.position.y += (targetCamY - camera.position.y) * 0.04;
         camera.position.z += (targetCamZ - camera.position.z) * 0.04;
         camera.lookAt(0, 0.35, 0);
       } else {
-        // Main celebration scene camera positioning
+        const mode = cameraModeRef.current;
         let targetX = 0;
         let targetY = 3.8;
         let targetZ = 12.5;
         let lookAtY = 2.0;
 
-        if (cameraMode === 'sky') {
+        if (mode === 'sky') {
           targetY = 1.6;
           targetZ = 9.0;
-          lookAtY = 9.5; // Look upwards towards the fireworks
-        } else if (cameraMode === 'cinematic') {
-          // Slow dramatic orbit around the lit courtyard
+          lookAtY = 9.5;
+        } else if (mode === 'cinematic') {
           targetX = Math.sin(time * 0.2) * 11.0;
           targetY = 4.2 + Math.cos(time * 0.25) * 1.5;
           targetZ = Math.cos(time * 0.2) * 11.0;
           lookAtY = 1.2;
         } else {
-          // Courtyard view with subtle mouse parallax
           targetX = mousePos.current.x * 3.5;
           targetY = 3.5 - mousePos.current.y * 1.5;
           targetZ = 11.5;
@@ -536,75 +554,116 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = ({
         camera.lookAt(0, lookAtY, 0);
       }
 
-      // 2. Animate Diya Flames (realistic flickering & light dancing)
+      // 2. Animate Diya Flames
       flamesRef.current.forEach((item, idx) => {
         const offset = idx * 1.35;
-        const wobble = Math.sin(time * 18 + offset) * 0.04;
-        const flicker = Math.sin(time * 30 + offset) * 0.08 + Math.sin(time * 12 + offset) * 0.12;
+        const flicker = Math.sin(time * 26 + offset) * 0.08 + Math.sin(time * 12 + offset) * 0.12;
 
         item.mesh.scale.set(
-          1 + wobble,
-          1 + flicker * 1.5,
-          1 + wobble
+          1 + flicker * 0.4,
+          1 + flicker * 1.4,
+          1 + flicker * 0.4
         );
 
-        // Flame point light intensity flicker
-        const baseIntensity = isIntro && idx > 0 ? 0.0 : (idx === 0 ? 3.0 : 1.6);
-        item.light.intensity = baseIntensity + flicker * 0.6;
+        const baseIntensity = isIntroRef.current && idx > 0 ? 0.0 : (idx === 0 ? 3.0 : 1.5);
+        item.light.intensity = baseIntensity + flicker * 0.5;
       });
 
-      // 3. Gentle Swaying of Akash Kandils (lanterns)
+      // 3. Lanterns sway
       kandilObjects.forEach((k, idx) => {
         const swayOffset = idx * 0.9;
-        k.rotation.z = Math.sin(time * 1.4 + swayOffset) * 0.08;
-        k.rotation.x = Math.cos(time * 1.1 + swayOffset) * 0.06;
+        k.rotation.z = Math.sin(time * 1.4 + swayOffset) * 0.07;
+        k.rotation.x = Math.cos(time * 1.1 + swayOffset) * 0.05;
       });
 
-      // 4. Rangoli Pulse Animation
-      if (rangoliMeshRef.current) {
-        const pulse = 0.85 + Math.sin(time * 2.2) * 0.15;
-        (rangoliMeshRef.current.material as THREE.MeshBasicMaterial).opacity = pulse;
+      // 4. Rangoli pulse
+      if (rangoli) {
+        (rangoli.material as THREE.MeshBasicMaterial).opacity = 0.85 + Math.sin(time * 2.2) * 0.15;
       }
 
-      // 5. Floating Embers rising up into the night sky
-      if (sparkParticlesRef.current) {
-        const positions = sparkParticlesRef.current.geometry.attributes.position.array as Float32Array;
-        for (let i = 0; i < emberCount; i++) {
-          positions[i * 3 + 1] += emberSpeeds[i];
-          positions[i * 3] += Math.sin(time + i) * 0.008; // gentle horizontal drift
-
-          // Reset if too high
-          if (positions[i * 3 + 1] > 20) {
-            positions[i * 3 + 1] = 0.1;
-            positions[i * 3] = (Math.random() - 0.5) * 30;
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 28;
-          }
+      // 5. Floating embers
+      const positions = emberGeo.attributes.position.array as Float32Array;
+      for (let i = 0; i < emberCount; i++) {
+        positions[i * 3 + 1] += emberSpeeds[i];
+        if (positions[i * 3 + 1] > 20) {
+          positions[i * 3 + 1] = 0.1;
+          positions[i * 3] = (Math.random() - 0.5) * 30;
+          positions[i * 3 + 2] = (Math.random() - 0.5) * 28;
         }
-        sparkParticlesRef.current.geometry.attributes.position.needsUpdate = true;
       }
+      emberGeo.attributes.position.needsUpdate = true;
 
       renderer.render(scene, camera);
     };
 
     animate();
 
+    // 11. THOROUGH RESOURCE DISPOSAL & CLEANUP
     return () => {
+      cancelAnimationFrame(animId);
       window.removeEventListener('mousemove', handlePointerMove);
       window.removeEventListener('resize', handleResize);
-      renderer.domElement.removeEventListener('click', handleCanvasClick);
-      renderer.dispose();
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+      if (renderer) {
+        renderer.domElement.removeEventListener('click', handleCanvasClick);
+        renderer.domElement.removeEventListener('touchstart', handleCanvasTouch);
+
+        // Traverse scene and dispose all geometries & materials
+        scene.traverse((obj) => {
+          if ((obj as THREE.Mesh).geometry) {
+            (obj as THREE.Mesh).geometry.dispose();
+          }
+          if ((obj as THREE.Mesh).material) {
+            const mat = (obj as THREE.Mesh).material;
+            if (Array.isArray(mat)) {
+              mat.forEach(m => m.dispose());
+            } else {
+              mat.dispose();
+            }
+          }
+        });
+
+        rangoliTex.dispose();
+        renderer.dispose();
+        if (container && container.contains(renderer.domElement)) {
+          container.removeChild(renderer.domElement);
+        }
       }
     };
-  }, [isIntro, cameraMode]);
+  }, []); // Run ONCE on mount
+
+  // WebGL Fallback for devices without GPU WebGL support
+  if (!webGlSupported) {
+    return (
+      <div
+        className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-radial from-[#12152b] via-[#070914] to-[#020308] select-none"
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden' }}
+      >
+        <div className="relative flex flex-col items-center animate-pulse">
+          <span className="text-7xl mb-2 drop-shadow-[0_0_30px_rgba(255,215,0,0.8)]">🪔</span>
+          <div className="w-32 h-6 bg-amber-400/20 blur-xl rounded-full" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
       ref={mountRef}
       className="absolute inset-0 w-full h-full pointer-events-auto"
-      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden', touchAction: 'none' }}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        touchAction: 'none',
+      }}
+      aria-label="3D Diwali Palace Courtyard Scene"
     />
   );
-};
+});
 
+DiwaliCanvas3D.displayName = 'DiwaliCanvas3D';

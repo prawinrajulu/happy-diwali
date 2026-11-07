@@ -14,6 +14,15 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     cssMinify: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          three: ['three'],
+          vendor: ['react', 'react-dom', 'lucide-react', 'canvas-confetti'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 900,
   },
   preview: {
     port: 4173,
