@@ -47,7 +47,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = memo(({ onStart, visible 
         {/* Glowing Experience Button */}
         <button
           onClick={onStart}
-          className="group relative inline-flex items-center gap-3 px-7 sm:px-9 py-3 sm:py-3.5 rounded-full text-base sm:text-lg font-bold text-amber-950 bg-linear-to-r from-amber-300 via-amber-400 to-amber-500 shadow-[0_0_35px_rgba(251,191,36,0.65)] hover:shadow-[0_0_55px_rgba(251,191,36,0.95)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer border border-amber-200/50 min-h-[48px]"
+          className="group relative inline-flex items-center gap-3 px-7 sm:px-9 py-3 sm:py-3.5 rounded-full text-base sm:text-lg font-bold text-amber-950 bg-linear-to-r from-amber-300 via-amber-400 to-amber-500 shadow-[0_0_35px_rgba(251,191,36,0.65)] hover:shadow-[0_0_55px_rgba(251,191,36,0.95)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer border border-amber-200/50 min-h-12"
           aria-label="Experience Diwali 3D Celebration"
         >
           <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-amber-900 animate-flame" />

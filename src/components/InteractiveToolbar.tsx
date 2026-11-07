@@ -89,7 +89,7 @@ export const InteractiveToolbar: React.FC<InteractiveToolbarProps> = memo(({
         {/* 1. Light a Diya */}
         <button
           onClick={onLightDiya}
-          className="flex items-center gap-1.5 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full bg-amber-950/30 border border-amber-500/30 hover:border-amber-400 text-amber-200 hover:text-amber-100 text-xs font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap min-h-[44px]"
+          className="flex items-center gap-1.5 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full bg-amber-950/30 border border-amber-500/30 hover:border-amber-400 text-amber-200 hover:text-amber-100 text-xs font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap min-h-11"
           title="Light up another diya in the courtyard"
           aria-label="Light a Diya"
         >
@@ -101,7 +101,7 @@ export const InteractiveToolbar: React.FC<InteractiveToolbarProps> = memo(({
         {/* 2. Launch Fireworks */}
         <button
           onClick={onLaunchFirework}
-          className="flex items-center gap-1.5 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full bg-black/40 border border-amber-500/30 hover:border-amber-400 text-amber-200 hover:text-amber-100 text-xs font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap min-h-[44px]"
+          className="flex items-center gap-1.5 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full bg-black/40 border border-amber-500/30 hover:border-amber-400 text-amber-200 hover:text-amber-100 text-xs font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap min-h-11"
           title="Launch colorful fireworks into the sky"
           aria-label="Launch Fireworks"
         >
@@ -113,7 +113,7 @@ export const InteractiveToolbar: React.FC<InteractiveToolbarProps> = memo(({
         {/* 3. Celebrate Again (Grand Finale) */}
         <button
           onClick={onGrandFinale}
-          className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full bg-linear-to-r from-amber-400 via-amber-300 to-amber-500 text-amber-950 font-bold text-xs shadow-[0_0_15px_rgba(245,158,11,0.4)] hover:shadow-[0_0_25px_rgba(245,158,11,0.7)] hover:scale-105 active:scale-95 transition-all cursor-pointer whitespace-nowrap min-h-[44px]"
+          className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full bg-linear-to-r from-amber-400 via-amber-300 to-amber-500 text-amber-950 font-bold text-xs shadow-[0_0_15px_rgba(245,158,11,0.4)] hover:shadow-[0_0_25px_rgba(245,158,11,0.7)] hover:scale-105 active:scale-95 transition-all cursor-pointer whitespace-nowrap min-h-11"
           title="Trigger a grand fireworks celebration show"
           aria-label="Celebrate Again with Grand Fireworks Finale"
         >
@@ -124,7 +124,7 @@ export const InteractiveToolbar: React.FC<InteractiveToolbarProps> = memo(({
         {/* 4. Sound Control */}
         <button
           onClick={onToggleSound}
-          className="flex items-center gap-1.5 px-3 sm:px-3 py-2 sm:py-2.5 rounded-full bg-black/40 border border-amber-500/30 hover:border-amber-400 text-amber-200 hover:text-amber-100 text-xs font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap min-h-[44px]"
+          className="flex items-center gap-1.5 px-3 sm:px-3 py-2 sm:py-2.5 rounded-full bg-black/40 border border-amber-500/30 hover:border-amber-400 text-amber-200 hover:text-amber-100 text-xs font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap min-h-11"
           title={isMuted ? 'Turn Sound On' : 'Mute Sound'}
           aria-label={isMuted ? 'Turn Sound On' : 'Mute Sound'}
         >
@@ -139,7 +139,7 @@ export const InteractiveToolbar: React.FC<InteractiveToolbarProps> = memo(({
         {/* 5. Camera View Toggle */}
         <button
           onClick={cycleCamera}
-          className="flex items-center gap-1.5 px-3 sm:px-3 py-2 sm:py-2.5 rounded-full bg-black/40 border border-amber-500/30 hover:border-amber-400 text-amber-200 hover:text-amber-100 text-xs font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap min-h-[44px]"
+          className="flex items-center gap-1.5 px-3 sm:px-3 py-2 sm:py-2.5 rounded-full bg-black/40 border border-amber-500/30 hover:border-amber-400 text-amber-200 hover:text-amber-100 text-xs font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap min-h-11"
           title="Switch 3D camera angle"
           aria-label={`Toggle camera angle. Current: ${getCameraLabel()}`}
         >
@@ -150,7 +150,7 @@ export const InteractiveToolbar: React.FC<InteractiveToolbarProps> = memo(({
         {/* 6. Firework Style Picker */}
         <button
           onClick={() => setShowTypeMenu(!showTypeMenu)}
-          className="p-2 sm:px-3 sm:py-2.5 rounded-full bg-black/40 border border-amber-500/30 hover:border-amber-400 text-amber-300 text-xs font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap min-h-[44px]"
+          className="p-2 sm:px-3 sm:py-2.5 rounded-full bg-black/40 border border-amber-500/30 hover:border-amber-400 text-amber-300 text-xs font-medium transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap min-h-11"
           title="Change firework explosion style"
           aria-label="Change firework style"
         >

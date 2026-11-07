@@ -122,7 +122,7 @@ export const EndingSection: React.FC<EndingSectionProps> = memo(({
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5 sm:gap-3">
           <button
             onClick={handleShare}
-            className="group relative inline-flex items-center gap-2 px-5 sm:px-6 py-3 rounded-full text-xs sm:text-sm font-bold text-amber-950 bg-linear-to-r from-amber-300 via-amber-400 to-amber-500 shadow-[0_0_20px_rgba(251,191,36,0.6)] hover:shadow-[0_0_35px_rgba(251,191,36,0.85)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer min-h-[44px]"
+            className="group relative inline-flex items-center gap-2 px-5 sm:px-6 py-3 rounded-full text-xs sm:text-sm font-bold text-amber-950 bg-linear-to-r from-amber-300 via-amber-400 to-amber-500 shadow-[0_0_20px_rgba(251,191,36,0.6)] hover:shadow-[0_0_35px_rgba(251,191,36,0.85)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer min-h-11"
             aria-label="Share Diwali Greetings"
           >
             <Share2 className="w-4 h-4 text-amber-900" />
@@ -131,7 +131,7 @@ export const EndingSection: React.FC<EndingSectionProps> = memo(({
 
           <button
             onClick={() => setShowPersonalize(!showPersonalize)}
-            className="inline-flex items-center gap-2 px-4 py-3 rounded-full text-xs sm:text-sm font-medium text-amber-200 bg-black/50 border border-amber-500/30 hover:bg-white/10 hover:border-amber-400 transition-all cursor-pointer min-h-[44px]"
+            className="inline-flex items-center gap-2 px-4 py-3 rounded-full text-xs sm:text-sm font-medium text-amber-200 bg-black/50 border border-amber-500/30 hover:bg-white/10 hover:border-amber-400 transition-all cursor-pointer min-h-11"
             aria-label="Personalize Wish with Name"
           >
             <UserPlus className="w-4 h-4 text-amber-400" />
@@ -143,7 +143,7 @@ export const EndingSection: React.FC<EndingSectionProps> = memo(({
         <div className="mt-5 pt-3.5 border-t border-amber-500/20 w-full flex items-center justify-between">
           <button
             onClick={onPrev}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-amber-300/80 hover:text-amber-100 hover:bg-white/10 transition-all cursor-pointer min-h-[40px]"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-amber-300/80 hover:text-amber-100 hover:bg-white/10 transition-all cursor-pointer min-h-10"
             aria-label="Previous: Return to Main Greeting"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
