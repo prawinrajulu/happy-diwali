@@ -157,7 +157,7 @@ export const DiwaliWishHero: React.FC<DiwaliWishHeroProps> = memo(({
         <div className="mt-5 sm:mt-7 flex flex-col items-center gap-2">
           <button
             onClick={onNext}
-            className="group relative inline-flex items-center gap-2.5 px-6 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-bold text-amber-950 bg-linear-to-r from-amber-300 via-amber-400 to-amber-500 shadow-[0_0_25px_rgba(251,191,36,0.6)] hover:shadow-[0_0_40px_rgba(251,191,36,0.9)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer border border-amber-200/50"
+            className="group relative inline-flex items-center gap-2.5 px-6 sm:px-8 py-3 rounded-full text-xs sm:text-sm font-bold text-amber-950 bg-linear-to-r from-amber-300 via-amber-400 to-amber-500 shadow-[0_0_25px_rgba(251,191,36,0.6)] hover:shadow-[0_0_40px_rgba(251,191,36,0.9)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer border border-amber-200/50 min-h-[44px]"
             aria-label="Next: View Family Blessings and Share Wish"
           >
             <span>View Family Blessings & Wishes</span>

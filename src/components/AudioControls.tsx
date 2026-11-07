@@ -106,13 +106,13 @@ export const AudioControls: React.FC<AudioControlsProps> = memo(({
           <button
             onClick={onToggleSound}
             aria-label={isMuted ? 'Unmute Festival Music' : 'Mute Music'}
-            className="p-1.5 sm:p-2 rounded-full bg-black/40 border border-amber-500/20 hover:border-amber-400 text-amber-200 backdrop-blur-md transition-all cursor-pointer hover:bg-white/10"
+            className="p-2 sm:p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full bg-black/40 border border-amber-500/20 hover:border-amber-400 text-amber-200 backdrop-blur-md transition-all cursor-pointer hover:bg-white/10"
             title={isMuted ? 'Unmute Sound' : 'Mute Sound'}
           >
             {isMuted ? (
-              <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400/60" />
+              <VolumeX className="w-4 h-4 text-amber-400/60" />
             ) : (
-              <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
+              <Volume2 className="w-4 h-4 text-amber-300" />
             )}
           </button>
 
@@ -120,10 +120,10 @@ export const AudioControls: React.FC<AudioControlsProps> = memo(({
           <button
             onClick={() => setShowInfo(true)}
             aria-label="Diwali Interactive Experience Guide"
-            className="p-1.5 sm:p-2 rounded-full bg-black/40 border border-amber-500/20 hover:border-amber-400 text-amber-300 backdrop-blur-md transition-all cursor-pointer hover:bg-white/10"
+            className="p-2 sm:p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full bg-black/40 border border-amber-500/20 hover:border-amber-400 text-amber-300 backdrop-blur-md transition-all cursor-pointer hover:bg-white/10"
             title="Interactive Guide"
           >
-            <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <Info className="w-4 h-4" />
           </button>
         </div>
       </header>

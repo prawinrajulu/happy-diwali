@@ -1,7 +1,13 @@
 import React, { useEffect, useRef, useState, memo } from 'react';
 import * as THREE from 'three';
 import { soundManager } from '../audio/soundManager';
-import { detectPerformanceProfile, isWebGLAvailable } from '../utils/performanceTier';
+import {
+  detectPerformanceProfile,
+  getProfileForQuality,
+  isWebGLAvailable,
+  fpsMonitor,
+  PerformanceProfile,
+} from '../utils/performanceTier';
 
 interface DiwaliCanvas3DProps {
   isIntro: boolean;
@@ -30,7 +36,7 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
   onDiyaClickRef.current = onDiyaClick;
 
   const isPausedRef = useRef(false);
-  const flamesRef = useRef<{ mesh: THREE.Mesh; light: THREE.PointLight; baseScale: number }[]>([]);
+  const flamesRef = useRef<{ mesh: THREE.Mesh; light: THREE.PointLight | null; baseScale: number }[]>([]);
   const mousePos = useRef({ x: 0, y: 0, targetX: 0, targetY: 0 });
 
   useEffect(() => {
@@ -43,25 +49,22 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
     const container = mountRef.current;
     if (!container) return;
 
-    const perf = detectPerformanceProfile();
+    let perf: PerformanceProfile = detectPerformanceProfile();
 
     // 2. SCENE SETUP
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x03050c, 0.016);
 
-    const camera = new THREE.PerspectiveCamera(
-      48,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      600
-    );
+    const aspect = window.innerWidth / window.innerHeight;
+    const initialFov = aspect < 0.65 ? 62 : aspect < 1.0 ? 54 : 48;
+    const camera = new THREE.PerspectiveCamera(initialFov, aspect, 0.1, 500);
     camera.position.set(0, 1.2, 3.2);
     camera.lookAt(0, 0.4, 0);
 
     let renderer: THREE.WebGLRenderer | null = null;
     try {
       renderer = new THREE.WebGLRenderer({
-        antialias: !perf.isMobile,
+        antialias: perf.quality === 'high',
         powerPreference: 'high-performance',
         alpha: false,
         stencil: false,
@@ -87,8 +90,8 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
-    // 3. ATMOSPHERIC LIGHTING (Deep Midnight with Warm Amber Glow)
-    const ambientLight = new THREE.AmbientLight(0x0c0f1d, 0.9);
+    // 3. ATMOSPHERIC LIGHTING (Optimized for Mobile Fragment Cycles)
+    const ambientLight = new THREE.AmbientLight(0x0e1120, perf.isMobile ? 1.05 : 0.9);
     scene.add(ambientLight);
 
     const moonLight = new THREE.DirectionalLight(0x223050, 0.45);
@@ -103,7 +106,7 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
     // 4. PROCEDURAL RANGOLI TEXTURE (Warm Royal Gold & Crimson)
     const createRangoliTexture = () => {
       const c = document.createElement('canvas');
-      const size = perf.isMobile ? 512 : 1024;
+      const size = perf.isMobile ? (perf.quality === 'low' ? 256 : 512) : 1024;
       c.width = size;
       c.height = size;
       const ctx = c.getContext('2d')!;
@@ -147,12 +150,12 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
 
     const rangoliTex = createRangoliTexture();
 
-    // Floor - Seamless deep midnight polished stone (No blue dais cylinder)
-    const floorGeo = new THREE.PlaneGeometry(100, 100);
+    // Floor - Seamless deep midnight polished stone
+    const floorGeo = new THREE.PlaneGeometry(90, 90);
     const floorMat = new THREE.MeshStandardMaterial({
       color: 0x03040a,
-      roughness: 0.14,
-      metalness: 0.7,
+      roughness: 0.16,
+      metalness: 0.65,
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -160,7 +163,7 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
     floor.receiveShadow = perf.shadowsEnabled;
     scene.add(floor);
 
-    // Rangoli Mesh - Smoothly projected onto floor
+    // Rangoli Mesh
     const rangoliGeo = new THREE.PlaneGeometry(8.2, 8.2);
     const rangoliMat = new THREE.MeshBasicMaterial({
       map: rangoliTex,
@@ -174,7 +177,7 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
     rangoli.position.set(0, 0.02, 0);
     scene.add(rangoli);
 
-    // 5. TRADITIONAL 3D DIYAS
+    // 5. TRADITIONAL 3D DIYAS (Shared Geometries & Materials)
     const diyasGroup = new THREE.Group();
     scene.add(diyasGroup);
 
@@ -190,14 +193,14 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
       new THREE.Vector2(0, 0.1),
     ];
 
-    const diyaGeo = new THREE.LatheGeometry(diyaPoints, perf.isMobile ? 18 : 32);
+    const diyaGeo = new THREE.LatheGeometry(diyaPoints, perf.cylinderSegments);
     const brassMat = new THREE.MeshStandardMaterial({
       color: 0xc8963e,
       roughness: 0.32,
       metalness: 0.78,
     });
 
-    const flameGeo = new THREE.ConeGeometry(0.09, 0.32, perf.isMobile ? 10 : 16);
+    const flameGeo = new THREE.ConeGeometry(0.09, 0.32, perf.isMobile ? 8 : 14);
     flameGeo.translate(0, 0.16, 0);
     const flameMat = new THREE.MeshBasicMaterial({
       color: 0xffe277,
@@ -206,8 +209,10 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
       blending: THREE.AdditiveBlending,
     });
 
-    const wickGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.1, 6);
+    const wickGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.1, 5);
     const wickMat = new THREE.MeshStandardMaterial({ color: 0x221105 });
+
+    let activeLightsCount = 0;
 
     const createDiya = (x: number, y: number, z: number, scale = 1.0, isMain = false) => {
       const diyaHolder = new THREE.Group();
@@ -224,17 +229,22 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
       wick.rotation.z = -0.3;
       diyaHolder.add(wick);
 
-      const flame = new THREE.Mesh(flameGeo, flameMat.clone());
+      const flame = new THREE.Mesh(flameGeo, flameMat);
       flame.position.set(0.2, 0.28, 0);
       diyaHolder.add(flame);
 
-      const flameLight = new THREE.PointLight(
-        0xff9922,
-        isMain ? 2.5 : 1.3,
-        isMain ? 7.0 : 5.0
-      );
-      flameLight.position.set(0.2, 0.35, 0);
-      diyaHolder.add(flameLight);
+      let flameLight: THREE.PointLight | null = null;
+      // Optimize point lights: only hero and limited accents on mobile
+      if (isMain || activeLightsCount < perf.pointLightCount) {
+        flameLight = new THREE.PointLight(
+          0xff9922,
+          isMain ? (perf.isMobile ? 2.8 : 2.5) : 1.2,
+          isMain ? 7.0 : 4.5
+        );
+        flameLight.position.set(0.2, 0.35, 0);
+        diyaHolder.add(flameLight);
+        activeLightsCount++;
+      }
 
       diyasGroup.add(diyaHolder);
 
@@ -248,11 +258,11 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
       return diyaHolder;
     };
 
-    // Hero center diya - Beautifully sculpted, warm golden glow
+    // Hero center diya
     createDiya(0, 0.04, 0, 1.45, true);
 
     // Rangoli perimeter diyas in balanced circular harmony
-    const rangoliDiyCount = perf.isMobile ? 6 : 8;
+    const rangoliDiyCount = perf.isMobile ? (perf.quality === 'low' ? 4 : 6) : 8;
     for (let i = 0; i < rangoliDiyCount; i++) {
       const angle = (i / rangoliDiyCount) * Math.PI * 2;
       const rx = Math.cos(angle) * 3.8;
@@ -261,7 +271,6 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
     }
 
     if (!perf.isMobile) {
-      // Background flanking diyas (Placed behind the rangoli, never in front of camera)
       const backdropDiyaPositions = [
         [-6.5, 0.04, -3],
         [6.5, 0.04, -3],
@@ -273,15 +282,15 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
       });
     }
 
-    // 6. INDIAN ARCHITECTURE (Palace Backdrop Pillars far in background)
+    // 6. INDIAN ARCHITECTURE (Palace Backdrop Pillars)
     const pillarMat = new THREE.MeshStandardMaterial({
       color: 0x141828,
       roughness: 0.45,
       metalness: 0.25,
     });
-    const pillarGeo = new THREE.CylinderGeometry(0.32, 0.42, 9, perf.isMobile ? 8 : 16);
+    const pillarGeo = new THREE.CylinderGeometry(0.32, 0.42, 9, perf.isMobile ? 6 : 12);
     const baseGeo = new THREE.BoxGeometry(1.1, 0.6, 1.1);
-    const capGeo = new THREE.CylinderGeometry(0.65, 0.38, 0.7, perf.isMobile ? 8 : 12);
+    const capGeo = new THREE.CylinderGeometry(0.65, 0.38, 0.7, perf.isMobile ? 6 : 10);
 
     const createPillar = (px: number, pz: number) => {
       const pillar = new THREE.Group();
@@ -302,8 +311,7 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
       scene.add(pillar);
     };
 
-    // Backdrop pillars framing the scene (NO foreground pillars to block text)
-    [-13, -8, 8, 13].forEach(px => {
+    [-13, -8, 8, 13].forEach((px) => {
       createPillar(px, -8);
     });
 
@@ -318,41 +326,43 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
     palaceWall.position.set(0, 10, -20);
     scene.add(palaceWall);
 
-    // Glowing Palace Domes (Framing outer wings only, leaving center sky open)
-    const domeMat = new THREE.MeshBasicMaterial({ color: 0x0f1429 });
-    const createDome = (dx: number, dy: number, dz: number, r: number) => {
-      const domeGeo = new THREE.SphereGeometry(r, perf.isMobile ? 12 : 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-      const dome = new THREE.Mesh(domeGeo, domeMat);
-      dome.position.set(dx, dy, dz);
-
-      const spireGeo = new THREE.ConeGeometry(0.18, 1.8, 8);
-      const spireMat = new THREE.MeshBasicMaterial({ color: 0xb8860b });
-      const spire = new THREE.Mesh(spireGeo, spireMat);
-      spire.position.set(dx, dy + r + 0.9, dz);
-
-      scene.add(dome);
-      scene.add(spire);
-    };
-
+    // Glowing Palace Domes (Wings only)
     if (!perf.isMobile) {
+      const domeMat = new THREE.MeshBasicMaterial({ color: 0x0f1429 });
+      const createDome = (dx: number, dy: number, dz: number, r: number) => {
+        const domeGeo = new THREE.SphereGeometry(r, 12, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+        const dome = new THREE.Mesh(domeGeo, domeMat);
+        dome.position.set(dx, dy, dz);
+
+        const spireGeo = new THREE.ConeGeometry(0.18, 1.8, 6);
+        const spireMat = new THREE.MeshBasicMaterial({ color: 0xb8860b });
+        const spire = new THREE.Mesh(spireGeo, spireMat);
+        spire.position.set(dx, dy + r + 0.9, dz);
+
+        scene.add(dome);
+        scene.add(spire);
+      };
+
       createDome(-15, 11, -22, 3.4);
       createDome(15, 11, -22, 3.4);
     }
 
-    // 7. SOFT GLOWING CIRCULAR GOLDEN EMBERS (Zero square artifacts)
+    // 7. SOFT GLOWING CIRCULAR GOLDEN EMBERS
     const createSparkleTexture = () => {
       const c = document.createElement('canvas');
-      c.width = 64;
-      c.height = 64;
+      const s = perf.isMobile ? 32 : 64;
+      c.width = s;
+      c.height = s;
       const ctx = c.getContext('2d')!;
-      const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      const r = s / 2;
+      const grad = ctx.createRadialGradient(r, r, 0, r, r, r);
       grad.addColorStop(0, 'rgba(255, 255, 230, 1)');
       grad.addColorStop(0.2, 'rgba(255, 215, 80, 0.9)');
       grad.addColorStop(0.55, 'rgba(245, 158, 11, 0.35)');
       grad.addColorStop(1, 'rgba(245, 158, 11, 0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(32, 32, 32, 0, Math.PI * 2);
+      ctx.arc(r, r, r, 0, Math.PI * 2);
       ctx.fill();
       const tex = new THREE.CanvasTexture(c);
       return tex;
@@ -360,7 +370,7 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
 
     const sparkleTex = createSparkleTexture();
 
-    const emberCount = Math.min(perf.embersCount, 45);
+    const emberCount = perf.embersCount;
     const emberGeo = new THREE.BufferGeometry();
     const emberPositions = new Float32Array(emberCount * 3);
     const emberSpeeds = new Float32Array(emberCount);
@@ -376,7 +386,7 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
     const emberMat = new THREE.PointsMaterial({
       map: sparkleTex,
       color: 0xffdf7a,
-      size: perf.isMobile ? 0.32 : 0.28,
+      size: perf.isMobile ? 0.34 : 0.28,
       transparent: true,
       opacity: 0.85,
       blending: THREE.AdditiveBlending,
@@ -385,15 +395,33 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
     const embers = new THREE.Points(emberGeo, emberMat);
     scene.add(embers);
 
-    // 9. EVENT LISTENERS
+    // 8. DYNAMIC QUALITY DOWNGRADING SUBSCRIPTION
+    const unsubscribeFps = fpsMonitor.subscribe((newQuality) => {
+      perf = getProfileForQuality(
+        newQuality,
+        perf.isMobile,
+        perf.isTablet,
+        perf.gpuRenderer,
+        perf.prefersReducedMotion
+      );
+      if (renderer) {
+        renderer.setPixelRatio(perf.pixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        if (renderer.shadowMap.enabled !== perf.shadowsEnabled) {
+          renderer.shadowMap.enabled = perf.shadowsEnabled;
+        }
+      }
+    });
+
+    // 9. EVENT LISTENERS & TOUCH RAYCASTING
     const handlePointerMove = (e: MouseEvent) => {
       if (!perf.enableMotionParallax) return;
       mousePos.current.targetX = (e.clientX / window.innerWidth) * 2 - 1;
       mousePos.current.targetY = -(e.clientY / window.innerHeight) * 2 + 1;
     };
-    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mousemove', handlePointerMove, { passive: true });
 
-    // Raycasting for clicking diyas (works for mouse and touch)
+    // Raycasting for clicking/touching diyas
     const raycaster = new THREE.Raycaster();
     const touchVector = new THREE.Vector2();
 
@@ -406,7 +434,7 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
 
       if (intersects.length > 0) {
         let hitDiya = false;
-        intersects.forEach(hit => {
+        intersects.forEach((hit) => {
           if (hit.object.userData.isDiya || hit.object.parent?.userData?.isDiya) {
             hitDiya = true;
           }
@@ -417,10 +445,10 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
           onDiyaClickRef.current();
 
           // Flare all flames briefly
-          flamesRef.current.forEach(f => {
-            f.light.intensity *= 1.8;
+          flamesRef.current.forEach((f) => {
+            if (f.light) f.light.intensity *= 1.8;
             setTimeout(() => {
-              f.light.intensity /= 1.8;
+              if (f.light) f.light.intensity /= 1.8;
             }, 600);
           });
         }
@@ -440,20 +468,47 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
     renderer.domElement.addEventListener('click', handleCanvasClick);
     renderer.domElement.addEventListener('touchstart', handleCanvasTouch, { passive: true });
 
+    // Responsive Resize & Orientation Handler
     const handleResize = () => {
       if (!renderer || !camera) return;
-      camera.aspect = window.innerWidth / window.innerHeight;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const curAspect = w / h;
+      camera.aspect = curAspect;
+
+      // Adapt FOV for tall mobile portraits vs wide desktop
+      if (curAspect < 0.65) {
+        camera.fov = 62;
+      } else if (curAspect < 1.0) {
+        camera.fov = 54;
+      } else {
+        camera.fov = 48;
+      }
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(w, h);
     };
-    window.addEventListener('resize', handleResize);
+
+    window.addEventListener('resize', handleResize, { passive: true });
+    window.addEventListener('orientationchange', handleResize, { passive: true });
+
+    // WebGL Context Loss Handlers (prevents black screen crash on mobile app switch)
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      isPausedRef.current = true;
+    };
+    const handleContextRestored = () => {
+      isPausedRef.current = false;
+    };
+
+    renderer.domElement.addEventListener('webglcontextlost', handleContextLost, false);
+    renderer.domElement.addEventListener('webglcontextrestored', handleContextRestored, false);
 
     const handleVisibilityChange = () => {
       isPausedRef.current = document.hidden;
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // 10. ANIMATION LOOP (Smooth, zero re-renders)
+    // 10. ANIMATION LOOP (Adaptive FPS Reporting + Zero Re-renders)
     let clock = new THREE.Clock();
     let animId: number;
 
@@ -462,17 +517,22 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
 
       if (isPausedRef.current) return;
 
+      fpsMonitor.reportFrame();
+
       const time = clock.getElapsedTime();
+      const currentWidth = window.innerWidth;
+      const currentHeight = window.innerHeight;
+      const isPortrait = currentWidth < currentHeight;
 
       // Smooth mouse parallax
       mousePos.current.x += (mousePos.current.targetX - mousePos.current.x) * 0.05;
       mousePos.current.y += (mousePos.current.targetY - mousePos.current.y) * 0.05;
 
-      // 1. Camera positioning according to active mode
+      // 1. Camera positioning according to active mode & mobile aspect
       if (isIntroRef.current) {
-        const targetCamX = Math.sin(time * 0.3) * 0.4 + mousePos.current.x * 0.3;
-        const targetCamY = 0.8 + Math.cos(time * 0.4) * 0.1 + mousePos.current.y * 0.2;
-        const targetCamZ = 2.8 + Math.sin(time * 0.2) * 0.2;
+        const targetCamX = Math.sin(time * 0.3) * 0.3 + mousePos.current.x * 0.2;
+        const targetCamY = (isPortrait ? 0.95 : 0.8) + Math.cos(time * 0.4) * 0.1 + mousePos.current.y * 0.15;
+        const targetCamZ = (isPortrait ? 3.4 : 2.8) + Math.sin(time * 0.2) * 0.2;
 
         camera.position.x += (targetCamX - camera.position.x) * 0.04;
         camera.position.y += (targetCamY - camera.position.y) * 0.04;
@@ -481,24 +541,25 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
       } else {
         const mode = cameraModeRef.current;
         let targetX = 0;
-        let targetY = 2.4;
-        let targetZ = 10.5;
-        let lookAtY = 0.6;
+        let targetY = isPortrait ? 2.8 : 2.4;
+        let targetZ = isPortrait ? 12.6 : 10.5;
+        let lookAtY = isPortrait ? 0.75 : 0.6;
 
         if (mode === 'sky') {
           targetY = 1.4;
           targetZ = 8.0;
           lookAtY = 8.5;
         } else if (mode === 'cinematic') {
-          targetX = Math.sin(time * 0.18) * 10.5;
-          targetY = 3.0 + Math.cos(time * 0.22) * 1.2;
-          targetZ = Math.cos(time * 0.18) * 10.5;
+          const orbitRadius = isPortrait ? 12.5 : 10.5;
+          targetX = Math.sin(time * 0.18) * orbitRadius;
+          targetY = (isPortrait ? 3.5 : 3.0) + Math.cos(time * 0.22) * 1.2;
+          targetZ = Math.cos(time * 0.18) * orbitRadius;
           lookAtY = 0.8;
         } else {
-          targetX = mousePos.current.x * 2.2;
-          targetY = 2.4 - mousePos.current.y * 1.0;
-          targetZ = 10.5;
-          lookAtY = 0.6;
+          targetX = mousePos.current.x * (isPortrait ? 1.4 : 2.2);
+          targetY = (isPortrait ? 2.8 : 2.4) - mousePos.current.y * 1.0;
+          targetZ = isPortrait ? 12.6 : 10.5;
+          lookAtY = isPortrait ? 0.75 : 0.6;
         }
 
         camera.position.x += (targetX - camera.position.x) * 0.04;
@@ -518,8 +579,10 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
           1 + flicker * 0.35
         );
 
-        const baseIntensity = isIntroRef.current && idx > 0 ? 0.0 : (idx === 0 ? 3.0 : 1.4);
-        item.light.intensity = baseIntensity + flicker * 0.45;
+        if (item.light) {
+          const baseIntensity = isIntroRef.current && idx > 0 ? 0.0 : idx === 0 ? 3.0 : 1.4;
+          item.light.intensity = baseIntensity + flicker * 0.45;
+        }
       });
 
       // 3. Rangoli subtle breathing pulse
@@ -544,18 +607,21 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
 
     animate();
 
-    // 11. THOROUGH RESOURCE DISPOSAL & CLEANUP
+    // 11. CLEANUP ON UNMOUNT
     return () => {
       cancelAnimationFrame(animId);
+      unsubscribeFps();
       window.removeEventListener('mousemove', handlePointerMove);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
 
       if (renderer) {
         renderer.domElement.removeEventListener('click', handleCanvasClick);
         renderer.domElement.removeEventListener('touchstart', handleCanvasTouch);
+        renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
+        renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
 
-        // Traverse scene and dispose all geometries & materials
         scene.traverse((obj) => {
           if ((obj as THREE.Mesh).geometry) {
             (obj as THREE.Mesh).geometry.dispose();
@@ -563,7 +629,7 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
           if ((obj as THREE.Mesh).material) {
             const mat = (obj as THREE.Mesh).material;
             if (Array.isArray(mat)) {
-              mat.forEach(m => m.dispose());
+              mat.forEach((m) => m.dispose());
             } else {
               mat.dispose();
             }
@@ -578,9 +644,9 @@ export const DiwaliCanvas3D: React.FC<DiwaliCanvas3DProps> = memo(({
         }
       }
     };
-  }, []); // Run ONCE on mount
+  }, []); // Mounts once
 
-  // WebGL Fallback for devices without GPU WebGL support
+  // Graceful WebGL Fallback UI
   if (!webGlSupported) {
     return (
       <div

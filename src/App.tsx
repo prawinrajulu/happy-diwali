@@ -210,7 +210,7 @@ export function App() {
             >
               <button
                 onClick={handleNextTab}
-                className="group relative pointer-events-auto inline-flex items-center justify-center gap-2.5 sm:gap-3 px-6 sm:px-10 py-3.5 sm:py-4 rounded-full font-serif font-bold text-sm sm:text-base md:text-lg text-amber-950 bg-linear-to-r from-[#FFF0A6] via-[#FFD700] to-[#D97706] shadow-[0_0_35px_rgba(251,191,36,0.65)] hover:shadow-[0_0_55px_rgba(251,191,36,0.95)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer border border-[#FFF9DB]/70 animate-pulse-glow max-w-[90vw]"
+                className="group relative pointer-events-auto inline-flex items-center justify-center gap-2.5 sm:gap-3 px-6 sm:px-10 py-3.5 sm:py-4 rounded-full font-serif font-bold text-sm sm:text-base md:text-lg text-amber-950 bg-linear-to-r from-[#FFF0A6] via-[#FFD700] to-[#D97706] shadow-[0_0_35px_rgba(251,191,36,0.65)] hover:shadow-[0_0_55px_rgba(251,191,36,0.95)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer border border-[#FFF9DB]/70 animate-pulse-glow max-w-[90vw] min-h-[48px]"
                 aria-label="View Family Blessings and Wishes"
               >
                 {/* Diya Icon */}
