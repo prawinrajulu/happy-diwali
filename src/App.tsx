@@ -8,7 +8,6 @@ import { AudioControls } from './components/AudioControls';
 import { InteractiveToolbar } from './components/InteractiveToolbar';
 import { soundManager } from './audio/soundManager';
 import confetti from 'canvas-confetti';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function App() {
   const [isIntro, setIsIntro] = useState(true);
@@ -17,6 +16,7 @@ export function App() {
   const [fireworkType, setFireworkType] = useState<FireworkType>('chrysanthemum');
   const [recipientName, setRecipientName] = useState('');
   const [activeTab, setActiveTab] = useState<'hero' | 'ending'>('hero');
+  const [isMuted, setIsMuted] = useState(false);
 
   const fireworksRef = useRef<FireworksHandle | null>(null);
   const transitionLockRef = useRef<boolean>(false);
@@ -59,14 +59,14 @@ export function App() {
     soundManager.startAmbientFestiveMusic();
     soundManager.playDiyaChime();
 
-    // Trigger welcoming fireworks burst
+    // Trigger welcoming fireworks burst on outer wings
     setTimeout(() => {
       fireworksRef.current?.launchRocket(undefined, undefined, 'multi-layer');
-    }, 500);
+    }, 450);
 
     setTimeout(() => {
-      fireworksRef.current?.launchRocket(undefined, undefined, 'chrysanthemum');
-    }, 1100);
+      fireworksRef.current?.launchRocket(undefined, undefined, 'willow-gold');
+    }, 1000);
 
     // Celebration confetti
     confetti({
@@ -105,6 +105,14 @@ export function App() {
     }, 350);
   }, []);
 
+  const handleToggleSound = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      soundManager.setMuted(next);
+      return next;
+    });
+  }, []);
+
   const handleDiyaClick = useCallback(() => {
     setDiyasLitCount((prev) => prev + 1);
   }, []);
@@ -114,6 +122,10 @@ export function App() {
     setDiyasLitCount((prev) => prev + 1);
     fireworksRef.current?.launchRocket(undefined, undefined, 'willow-gold');
   }, []);
+
+  const handleLaunchFireworkButton = useCallback(() => {
+    fireworksRef.current?.launchRocket(undefined, undefined, fireworkType);
+  }, [fireworkType]);
 
   const handleGrandFinale = useCallback(() => {
     fireworksRef.current?.triggerGrandFinale();
@@ -128,13 +140,13 @@ export function App() {
 
   return (
     <main
-      className="relative w-full h-full overflow-hidden bg-[#03040a] select-none"
+      className="relative w-full h-full overflow-hidden bg-[#020308] select-none"
       style={{
         position: 'relative',
         width: '100vw',
         height: '100vh',
         overflow: 'hidden',
-        backgroundColor: '#03040a',
+        backgroundColor: '#020308',
         touchAction: 'manipulation',
       }}
     >
@@ -146,7 +158,7 @@ export function App() {
         cameraMode={cameraMode}
       />
 
-      {/* 2. Zero-Allocation Pooled Fireworks Engine */}
+      {/* 2. Zero-Allocation Pooled Fireworks Engine (Clean Center Zone) */}
       <FireworksCanvas
         ref={fireworksRef}
         active={!isIntro}
@@ -161,79 +173,24 @@ export function App() {
       {/* 4. Active Celebration Overlays & Controls */}
       {!isIntro && (
         <>
-          {/* Top Audio & Navigation Bar */}
-          <AudioControls diyasLitCount={diyasLitCount} />
+          {/* Top Minimal Navigation Bar with Minimized Diya Counter & Sound */}
+          <AudioControls
+            diyasLitCount={diyasLitCount}
+            activeTab={activeTab}
+            onPrevTab={handlePrevTab}
+            onNextTab={handleNextTab}
+            isMuted={isMuted}
+            onToggleSound={handleToggleSound}
+          />
 
-          {/* Master Step Navigation Controller (Prev / Tabs / Next) */}
-          <nav
-            aria-label="Diwali Celebration Steps"
-            className="absolute top-14 sm:top-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 sm:gap-2 p-1 rounded-full bg-black/75 border border-amber-500/35 backdrop-blur-md pointer-events-auto shadow-lg"
-          >
-            {/* Prev Button */}
-            <button
-              onClick={handlePrevTab}
-              disabled={activeTab === 'hero'}
-              className={`p-1.5 rounded-full transition-all cursor-pointer ${
-                activeTab === 'hero'
-                  ? 'text-amber-500/30 cursor-not-allowed'
-                  : 'text-amber-300 hover:bg-white/10 hover:text-amber-100 active:scale-95'
-              }`}
-              title="Previous Step"
-              aria-label="Previous Section"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            {/* Tab 1 */}
-            <button
-              onClick={handlePrevTab}
-              className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                activeTab === 'hero'
-                  ? 'bg-amber-400 text-amber-950 shadow-md font-bold'
-                  : 'text-amber-200/80 hover:text-amber-100'
-              }`}
-              aria-current={activeTab === 'hero' ? 'page' : undefined}
-            >
-              1. Main Wish
-            </button>
-
-            {/* Tab 2 */}
-            <button
-              onClick={handleNextTab}
-              className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                activeTab === 'ending'
-                  ? 'bg-amber-400 text-amber-950 shadow-md font-bold'
-                  : 'text-amber-200/80 hover:text-amber-100'
-              }`}
-              aria-current={activeTab === 'ending' ? 'page' : undefined}
-            >
-              2. Blessings & Share
-            </button>
-
-            {/* Next Button */}
-            <button
-              onClick={handleNextTab}
-              disabled={activeTab === 'ending'}
-              className={`p-1.5 rounded-full transition-all cursor-pointer ${
-                activeTab === 'ending'
-                  ? 'text-amber-500/30 cursor-not-allowed'
-                  : 'text-amber-300 hover:bg-white/10 hover:text-amber-100 active:scale-95'
-              }`}
-              title="Next Step"
-              aria-label="Next Section"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </nav>
-
-          {/* Section 1: Main Diwali Wish Reveal */}
+          {/* Page 1: Main Diwali Wish Reveal */}
           <DiwaliWishHero
             visible={activeTab === 'hero'}
             recipientName={recipientName}
             onNext={handleNextTab}
           />
 
-          {/* Section 2: Special Ending Section with Share */}
+          {/* Page 2: Special Ending Section with Share */}
           <EndingSection
             visible={activeTab === 'ending'}
             recipientName={recipientName}
@@ -242,10 +199,13 @@ export function App() {
             onPrev={handlePrevTab}
           />
 
-          {/* Bottom Interactive Toolbar Dock */}
+          {/* Bottom Floating Interactive Toolbar */}
           <InteractiveToolbar
-            onGrandFinale={handleGrandFinale}
             onLightDiya={handleLightDiyaButton}
+            onLaunchFirework={handleLaunchFireworkButton}
+            onGrandFinale={handleGrandFinale}
+            isMuted={isMuted}
+            onToggleSound={handleToggleSound}
             cameraMode={cameraMode}
             onChangeCameraMode={setCameraMode}
             currentFireworkType={fireworkType}

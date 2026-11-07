@@ -1,121 +1,180 @@
 import React, { useState, memo } from 'react';
-import { Volume2, VolumeX, Info, X } from 'lucide-react';
-import { soundManager } from '../audio/soundManager';
+import { Volume2, VolumeX, Info, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface AudioControlsProps {
   diyasLitCount: number;
+  activeTab: 'hero' | 'ending';
+  onPrevTab: () => void;
+  onNextTab: () => void;
+  isMuted: boolean;
+  onToggleSound: () => void;
 }
 
-export const AudioControls: React.FC<AudioControlsProps> = memo(({ diyasLitCount }) => {
-  const [muted, setMuted] = useState(false);
+export const AudioControls: React.FC<AudioControlsProps> = memo(({
+  diyasLitCount,
+  activeTab,
+  onPrevTab,
+  onNextTab,
+  isMuted,
+  onToggleSound,
+}) => {
   const [showInfo, setShowInfo] = useState(false);
-
-  const toggleSound = () => {
-    const next = !muted;
-    setMuted(next);
-    soundManager.setMuted(next);
-  };
 
   return (
     <>
-      {/* Top Floating Header Controls */}
-      <header className="absolute top-3 sm:top-4 inset-x-3 sm:inset-x-4 z-30 flex items-center justify-between pointer-events-none select-none">
-        {/* Left: Diyas Lit Badge */}
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <div className="flex items-center gap-2 px-3 sm:px-3.5 py-1.5 rounded-full bg-black/65 border border-amber-500/40 backdrop-blur-md shadow-[0_0_15px_rgba(245,158,11,0.2)] text-amber-200 text-xs sm:text-sm font-medium">
-            <span className="text-sm sm:text-base animate-pulse">🪔</span>
-            <span>Diyas:</span>
-            <span className="font-bold text-amber-400 font-mono text-sm sm:text-base">
-              {diyasLitCount}
-            </span>
+      {/* Sleek Minimal Top Navigation Header */}
+      <header
+        className="absolute top-2.5 sm:top-4 inset-x-3 sm:inset-x-6 z-30 flex items-center justify-between pointer-events-none select-none"
+        aria-label="Diwali Celebration Top Navigation"
+      >
+        {/* Left: Minimized, subtle diya counter */}
+        <div className="flex items-center pointer-events-auto">
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/40 border border-amber-500/20 backdrop-blur-md text-amber-200/70 text-[11px] font-mono tracking-wider shadow-sm hover:border-amber-400/40 transition-colors"
+            title="Diyas illuminated in the courtyard"
+          >
+            <span className="text-xs">🪔</span>
+            <span className="font-semibold text-amber-300">{diyasLitCount}</span>
           </div>
         </div>
 
-        {/* Right: Sound & Info Buttons */}
-        <div className="flex items-center gap-2 pointer-events-auto">
-          {/* Sound Toggle */}
+        {/* Center: Minimal Elegant Page Indicators with Previous & Next */}
+        <nav
+          aria-label="Celebration Steps Navigation"
+          className="flex items-center gap-1 p-1 rounded-full bg-black/60 border border-amber-500/25 backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,0.6)] pointer-events-auto"
+        >
+          {/* Previous Button */}
           <button
-            onClick={toggleSound}
-            aria-label={muted ? 'Unmute Festival Music & Fireworks Sound' : 'Mute Sound'}
-            className="flex items-center gap-2 px-3 sm:px-3.5 py-2 min-h-[40px] rounded-full bg-black/65 border border-amber-500/40 hover:border-amber-400 text-amber-200 backdrop-blur-md shadow-[0_0_15px_rgba(0,0,0,0.6)] transition-all cursor-pointer hover:bg-amber-950/40"
-            title={muted ? 'Unmute Festival Music & Fireworks' : 'Mute Sound'}
+            onClick={onPrevTab}
+            disabled={activeTab === 'hero'}
+            className={`p-1.5 rounded-full transition-all cursor-pointer ${
+              activeTab === 'hero'
+                ? 'text-amber-500/25 cursor-not-allowed opacity-40'
+                : 'text-amber-300 hover:bg-white/10 hover:text-amber-100 active:scale-95'
+            }`}
+            title="Previous Step"
+            aria-label="Previous Page: Celebration"
           >
-            {muted ? (
-              <VolumeX className="w-4 h-4 text-amber-400/70" />
+            <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+
+          {/* Page 1 Indicator */}
+          <button
+            onClick={onPrevTab}
+            className={`px-2.5 sm:px-3.5 py-1 rounded-full text-[11px] sm:text-xs font-serif tracking-widest uppercase transition-all cursor-pointer ${
+              activeTab === 'hero'
+                ? 'bg-linear-to-r from-amber-400 to-amber-500 text-amber-950 font-bold shadow-[0_0_15px_rgba(251,191,36,0.5)]'
+                : 'text-amber-200/60 hover:text-amber-100 hover:bg-white/5'
+            }`}
+            aria-current={activeTab === 'hero' ? 'page' : undefined}
+          >
+            01 • Celebration
+          </button>
+
+          {/* Page 2 Indicator */}
+          <button
+            onClick={onNextTab}
+            className={`px-2.5 sm:px-3.5 py-1 rounded-full text-[11px] sm:text-xs font-serif tracking-widest uppercase transition-all cursor-pointer ${
+              activeTab === 'ending'
+                ? 'bg-linear-to-r from-amber-400 to-amber-500 text-amber-950 font-bold shadow-[0_0_15px_rgba(251,191,36,0.5)]'
+                : 'text-amber-200/60 hover:text-amber-100 hover:bg-white/5'
+            }`}
+            aria-current={activeTab === 'ending' ? 'page' : undefined}
+          >
+            02 • Blessings
+          </button>
+
+          {/* Next Button */}
+          <button
+            onClick={onNextTab}
+            disabled={activeTab === 'ending'}
+            className={`p-1.5 rounded-full transition-all cursor-pointer ${
+              activeTab === 'ending'
+                ? 'text-amber-500/25 cursor-not-allowed opacity-40'
+                : 'text-amber-300 hover:bg-white/10 hover:text-amber-100 active:scale-95'
+            }`}
+            title="Next Step"
+            aria-label="Next Page: Blessings & Wishes"
+          >
+            <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+        </nav>
+
+        {/* Right: Sound toggle and Info guide */}
+        <div className="flex items-center gap-1.5 pointer-events-auto">
+          {/* Quick Sound Toggle */}
+          <button
+            onClick={onToggleSound}
+            aria-label={isMuted ? 'Unmute Festival Music' : 'Mute Music'}
+            className="p-1.5 sm:p-2 rounded-full bg-black/40 border border-amber-500/20 hover:border-amber-400 text-amber-200 backdrop-blur-md transition-all cursor-pointer hover:bg-white/10"
+            title={isMuted ? 'Unmute Sound' : 'Mute Sound'}
+          >
+            {isMuted ? (
+              <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400/60" />
             ) : (
-              <>
-                <Volume2 className="w-4 h-4 text-amber-400 animate-pulse" />
-                <div className="flex items-center gap-0.5 h-3" aria-hidden="true">
-                  <span className="w-0.5 h-2 bg-amber-400 animate-[bounce_0.8s_ease-in-out_infinite]" />
-                  <span className="w-0.5 h-3 bg-amber-300 animate-[bounce_0.6s_ease-in-out_infinite_0.2s]" />
-                  <span className="w-0.5 h-1.5 bg-amber-400 animate-[bounce_0.9s_ease-in-out_infinite_0.4s]" />
-                </div>
-              </>
+              <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
             )}
-            <span className="text-xs font-medium hidden sm:inline">
-              {muted ? 'Muted' : 'Sound On'}
-            </span>
           </button>
 
           {/* Info Modal Trigger */}
           <button
             onClick={() => setShowInfo(true)}
             aria-label="Diwali Interactive Experience Guide"
-            className="p-2 sm:p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full bg-black/65 border border-amber-500/40 hover:border-amber-400 text-amber-300 backdrop-blur-md shadow-md hover:bg-amber-950/40 transition-all cursor-pointer"
-            title="How to interact"
+            className="p-1.5 sm:p-2 rounded-full bg-black/40 border border-amber-500/20 hover:border-amber-400 text-amber-300 backdrop-blur-md transition-all cursor-pointer hover:bg-white/10"
+            title="Interactive Guide"
           >
-            <Info className="w-4 h-4" />
+            <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
       </header>
 
-      {/* Info Modal */}
+      {/* Luxury Interactive Guide Modal */}
       {showInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in pointer-events-auto">
-          <div className="relative w-full max-w-md p-6 rounded-3xl bg-[#090b16] border border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.3)] text-amber-100 max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-md p-6 sm:p-7 rounded-3xl bg-[#080a14] border border-amber-500/40 shadow-[0_0_50px_rgba(245,158,11,0.25)] text-amber-100 max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setShowInfo(false)}
-              className="absolute top-4 right-4 p-2 rounded-full text-amber-400/80 hover:text-amber-200 hover:bg-white/10 transition-all cursor-pointer"
+              className="absolute top-4 right-4 p-2 rounded-full text-amber-400/70 hover:text-amber-200 hover:bg-white/10 transition-all cursor-pointer"
               aria-label="Close guide"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2.5 mb-4">
               <span className="text-2xl">🪔</span>
               <h3 className="text-xl font-serif font-bold text-amber-300">
                 Diwali Interactive Guide
               </h3>
             </div>
 
-            <ul className="space-y-3 text-sm text-amber-200/90 leading-relaxed font-light">
-              <li className="flex items-start gap-2">
-                <span className="text-amber-400 font-bold">✨ Fireworks:</span>
-                <span>Tap or click anywhere in the night sky to launch interactive firework rockets!</span>
+            <ul className="space-y-3 text-xs sm:text-sm text-amber-200/90 leading-relaxed font-light">
+              <li className="flex items-start gap-2.5">
+                <span className="text-amber-400 font-bold shrink-0">✨ Fireworks:</span>
+                <span>Click or tap anywhere in the night sky to launch interactive colorful rockets.</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-amber-400 font-bold">🪔 3D Diyas:</span>
-                <span>Click or tap any courtyard diya to light it brighter and hear the temple bell chime.</span>
+              <li className="flex items-start gap-2.5">
+                <span className="text-amber-400 font-bold shrink-0">🪔 3D Courtyard Diya:</span>
+                <span>Click the glowing courtyard diya to light it brighter and hear temple chimes.</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-amber-400 font-bold">🎆 Grand Finale:</span>
-                <span>Click "Celebrate Again" in the bottom dock to trigger an 18+ rocket sky celebration!</span>
+              <li className="flex items-start gap-2.5">
+                <span className="text-amber-400 font-bold shrink-0">🎆 Grand Finale:</span>
+                <span>Use the bottom toolbar to trigger a synchronized grand fireworks show.</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-amber-400 font-bold">📷 Camera Modes:</span>
-                <span>Switch between Courtyard View, Sky Fireworks View, and 360 Cinematic Orbit.</span>
+              <li className="flex items-start gap-2.5">
+                <span className="text-amber-400 font-bold shrink-0">📷 Camera Angles:</span>
+                <span>Switch between Courtyard View, Sky Fireworks, and 360 Cinematic Orbit.</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-amber-400 font-bold">💌 Custom Wishes:</span>
-                <span>Enter names to generate personalized links to share Diwali happiness with family!</span>
+              <li className="flex items-start gap-2.5">
+                <span className="text-amber-400 font-bold shrink-0">💌 Custom Blessings:</span>
+                <span>Navigate to Page 2 to personalize and share your festive wishes with family!</span>
               </li>
             </ul>
 
             <button
               onClick={() => setShowInfo(false)}
-              className="mt-6 w-full py-3 rounded-xl bg-linear-to-r from-amber-400 to-amber-500 text-amber-950 font-bold text-sm shadow-lg hover:brightness-110 active:scale-98 transition-all cursor-pointer"
+              className="mt-6 w-full py-3 rounded-full bg-linear-to-r from-amber-400 via-amber-300 to-amber-500 text-amber-950 font-bold text-xs sm:text-sm shadow-lg hover:brightness-105 active:scale-98 transition-all cursor-pointer"
             >
-              Back to Celebration ✨
+              Return to Celebration ✨
             </button>
           </div>
         </div>

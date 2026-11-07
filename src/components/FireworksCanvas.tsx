@@ -52,12 +52,12 @@ interface Rocket {
 }
 
 const PALETTES = [
-  ['#FFD700', '#FFA500', '#FF8C00', '#FFF8DC', '#FFE4B5'],
-  ['#FF1744', '#FF5252', '#FF4081', '#FF80AB', '#FFD700'],
-  ['#00E676', '#1DE9B6', '#69F0AE', '#00B0FF', '#FFEA00'],
-  ['#2979FF', '#7C4DFF', '#651FFF', '#00E5FF', '#E040FB'],
-  ['#FF1744', '#FFD700', '#00E676', '#2979FF', '#FF4081', '#FF9100'],
-  ['#FFF2A3', '#FFD700', '#F59E0B', '#FDE68A', '#FFFFFF']
+  ['#FFD700', '#FFA500', '#FF8C00', '#FFF8DC', '#FFE4B5'], // Royal Gold & Amber
+  ['#FF1744', '#FF5252', '#FF4081', '#FFD700', '#FFF275'], // Crimson & Gold
+  ['#00E676', '#1DE9B6', '#69F0AE', '#FFD700', '#FFEA00'], // Emerald & Gold
+  ['#7C4DFF', '#B388FF', '#00E5FF', '#FF80AB', '#FFFFFF'], // Sapphire & Amethyst
+  ['#FF9100', '#FF5722', '#FFD700', '#FFF59D', '#FFFFFF'], // Sunset Marigold
+  ['#FFFFFF', '#FFF9C4', '#FFE082', '#FFD54F', '#FFA000'], // Starlight Diamond
 ];
 
 export const FireworksCanvas = memo(
@@ -269,20 +269,27 @@ export const FireworksCanvas = memo(
       ];
       const type = preferredType || types[Math.floor(Math.random() * types.length)];
 
+      // Keep center zone (30% - 70%) clear for Diwali greetings & title
+      let destX: number;
+      if (targetX !== undefined) {
+        destX = targetX;
+      } else {
+        const isLeftWing = Math.random() < 0.5;
+        destX = isLeftWing
+          ? canvas.width * (0.06 + Math.random() * 0.22) // Left sky wing (6% to 28%)
+          : canvas.width * (0.72 + Math.random() * 0.22); // Right sky wing (72% to 94%)
+      }
+
       const startX =
         targetX !== undefined
-          ? targetX + (Math.random() * 60 - 30)
-          : canvas.width * 0.15 + Math.random() * canvas.width * 0.7;
+          ? targetX + (Math.random() * 40 - 20)
+          : destX + (Math.random() * 50 - 25);
       const startY = canvas.height + 15;
 
-      const destX =
-        targetX !== undefined
-          ? targetX
-          : canvas.width * 0.15 + Math.random() * canvas.width * 0.7;
       const destY =
         targetY !== undefined
-          ? Math.max(70, Math.min(canvas.height * 0.62, targetY))
-          : canvas.height * 0.12 + Math.random() * canvas.height * 0.36;
+          ? Math.max(60, Math.min(canvas.height * 0.58, targetY))
+          : canvas.height * (0.08 + Math.random() * 0.28);
 
       const dx = destX - startX;
       const dy = destY - startY;
@@ -379,12 +386,14 @@ export const FireworksCanvas = memo(
             lastAutoLaunchRef.current = time;
           }
 
-          if (finaleQueueRef.current > 0 && Math.random() < 0.4) {
+          if (finaleQueueRef.current > 0 && Math.random() < 0.45) {
             finaleQueueRef.current--;
-            launchRocket(
-              width * 0.12 + Math.random() * width * 0.76,
-              height * 0.12 + Math.random() * height * 0.38
-            );
+            const isLeft = Math.random() < 0.5;
+            const fx = isLeft
+              ? width * (0.05 + Math.random() * 0.25)
+              : width * (0.70 + Math.random() * 0.25);
+            const fy = height * (0.08 + Math.random() * 0.26);
+            launchRocket(fx, fy);
           }
         }
 
